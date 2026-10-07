@@ -1,0 +1,13 @@
+services:
+  manabox-cuber:
+    build: .
+    image: manabox-cuber
+    container_name: manabox-cuber
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      # Fallback conversion for cards without a EUR price on Scryfall.
+      - USD_TO_EUR=0.92
+    restart: unless-stopped

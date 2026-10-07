@@ -1,0 +1,96 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  --color-bg: #0e0f13;
+  --color-bar: #12141a;
+  --color-side: #111318;
+  --color-panel: #14161c;
+  --color-panel-2: #181b22;
+  --color-raised: #1b1e26;
+  --color-chip: #262a33;
+  --color-line: #23262e;
+  --color-line-2: #2c303a;
+  --color-line-3: #343946;
+  --color-fg: #e8e6e3;
+  --color-soft: #c9cdd4;
+  --color-muted: #9aa0aa;
+  --color-dim: #7d8490;
+  --color-accent: #e8a33d;
+  --color-accent-hi: #f5be66;
+  --color-accent-ink: #14110b;
+  --color-warn-bg: #2a2113;
+  --color-warn-line: #5c4520;
+  --color-warn-fg: #f3d9a8;
+  --color-ok: #6cc48a;
+  --color-bad: #e5707a;
+
+  --color-mana-w: #f0e6c8;
+  --color-mana-u: #4a90d9;
+  --color-mana-b: #4b4150;
+  --color-mana-r: #c9503a;
+  --color-mana-g: #3e8e5e;
+  --color-mana-c: #9aa0aa;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+  }
+  ::selection {
+    background: #e8a33d55;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  input,
+  select,
+  button {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line-2 bg-panel-2 px-3.5 text-[13px] font-medium text-fg transition-colors hover:border-line-3 hover:bg-chip disabled:opacity-50 disabled:pointer-events-none min-h-10;
+  }
+  .btn-primary {
+    @apply border-accent bg-accent font-semibold text-accent-ink hover:bg-accent-hi hover:border-accent-hi;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent text-muted hover:bg-panel-2 hover:text-fg;
+  }
+  .btn-icon {
+    @apply px-0 w-10;
+  }
+  .field {
+    @apply rounded-lg border border-line-2 bg-panel-2 px-3 text-[13px] text-fg min-h-10 outline-none focus:border-accent;
+  }
+  .seg {
+    @apply rounded-[7px] px-3.5 text-[13px] font-medium text-muted min-h-9 transition-colors hover:text-fg;
+  }
+  .seg-on {
+    @apply bg-chip text-fg;
+  }
+  .facet {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-dim;
+  }
+  .panel {
+    @apply rounded-[14px] border border-line bg-panel;
+  }
+  .pill {
+    @apply rounded-[5px] px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.03em] whitespace-nowrap;
+  }
+}
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #343946 transparent;
+}
