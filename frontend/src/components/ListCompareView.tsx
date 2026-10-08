@@ -14,7 +14,7 @@ function Count({ have, of }: { have: number | null; of: number }) {
   return <span className={clsx('font-mono', n >= of ? 'text-ok' : n > 0 ? 'text-accent' : 'text-bad')}>{n}/{of}</span>
 }
 
-function CompareRow({ item, price, onOpen }: { item: ListItem; price: number; onOpen: () => void }) {
+function CompareRow({ item, price, them, onOpen }: { item: ListItem; price: number; them: string; onOpen: () => void }) {
   const hover = useHoverPreview(item.card, item.ownership === 'not_owned')
   const bucket = compareBucket(item)
   return (
@@ -27,14 +27,28 @@ function CompareRow({ item, price, onOpen }: { item: ListItem; price: number; on
       <td className="px-2 text-right font-mono text-dim">{item.quantity}</td>
       <td className="px-2 text-right"><Count have={item.owned} of={item.quantity} /></td>
       <td className="px-2 text-right"><Count have={item.their_owned} of={item.quantity} /></td>
-      <td className="hidden px-2 text-xs text-muted sm:table-cell">{bucket ? COMPARE_LABEL[bucket] : 'Unknown'}</td>
+      <td className="hidden px-2 text-xs text-muted sm:table-cell">{bucket === 'only_them' ? `Only ${them}` : bucket ? COMPARE_LABEL[bucket] : 'Unknown'}</td>
       <td className="py-1.5 pl-2 pr-4 text-right font-mono text-xs text-muted">{fmtEur(price)}</td>
     </tr>
   )
 }
 
-/** Side-by-side ownership of a shared list: what each of us has and misses. */
-export function ListCompareView({ items, sharedBy, onOpen }: { items: ListItem[]; sharedBy: string | null; onOpen: (item: ListItem) => void }) {
+/**
+ * Side-by-side ownership: what each of us has and misses. The other side is whoever shared the list,
+ * or CubeCobra's statuses for a linked cube (`their_owned` holds their copies).
+ */
+export function ListCompareView({
+  items,
+  sharedBy,
+  note,
+  onOpen,
+}: {
+  items: ListItem[]
+  sharedBy: string | null
+  /** what "their" ownership means, under their counts */
+  note: string
+  onOpen: (item: ListItem) => void
+}) {
   const rate = useUsdRate()
   const them = sharedBy || 'Them'
   const [filter, setFilter] = useState<Filter>('all')
@@ -75,7 +89,7 @@ export function ListCompareView({ items, sharedBy, onOpen }: { items: ListItem[]
         <div className="panel flex flex-col gap-1 px-4 py-3">
           <span className="text-xs text-muted">Cards only {sharedBy || 'they'} {sharedBy ? 'has' : 'have'}</span>
           <span className="font-mono text-lg">{summary.counts.only_them}</span>
-          <span className="text-xs text-dim">ownership as of their export</span>
+          <span className="text-xs text-dim">{note}</span>
         </div>
       </div>
 
@@ -104,7 +118,7 @@ export function ListCompareView({ items, sharedBy, onOpen }: { items: ListItem[]
             </thead>
             <tbody>
               {shown.map((i) => (
-                <CompareRow key={i.id} item={i} price={price(i)} onOpen={() => onOpen(i)} />
+                <CompareRow key={i.id} item={i} price={price(i)} them={sharedBy || 'them'} onOpen={() => onOpen(i)} />
               ))}
             </tbody>
           </table>

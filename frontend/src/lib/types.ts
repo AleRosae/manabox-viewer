@@ -125,6 +125,9 @@ export interface ListSummary {
   kind: ListKind
   /** who shared the list, when it was imported from someone else's export */
   shared_by: string | null
+  /** linked CubeCobra cube id; synced on demand */
+  cubecobra_id: string | null
+  synced_at: string | null
   created_at: string
   updated_at: string
   card_count: number
@@ -144,6 +147,12 @@ export interface ListItem {
   ownership: Ownership
   /** copies the sharer owned (imported lists only); null when unknown */
   their_owned: number | null
+  /** labels, exported as CubeCobra tags */
+  tags: string[]
+  /** CubeCobra status of each copy (Owned, Proxied, ...), as of the last sync; null when unknown */
+  cube_statuses: string[] | null
+  /** copies CubeCobra marks as in the cube (owned, proxied, borrowed); null when unknown */
+  cube_owned: number | null
   card: Card
 }
 
@@ -176,12 +185,32 @@ export interface ListImportPreviewItem {
   owned: number
   ownership: Ownership
   their_owned: number | null
+  tags: string[]
+  /** only for CubeCobra cubes */
+  cube_statuses?: string[]
   card: Card
 }
 
 export interface ListImportPreview {
-  meta: { name: string | null; kind: ListKind | null; has_ownership: boolean }
+  meta: { name: string | null; kind: ListKind | null; has_ownership: boolean; cubecobra_id?: string }
   items: ListImportPreviewItem[]
   /** lines that could not be parsed or matched to a card */
   unresolved: string[]
+}
+
+/** Differences between a list and its CubeCobra cube (applied when `applied` is true). */
+export interface CubeSync {
+  cube: { id: string; name: string; url: string }
+  applied: boolean
+  added: { oracle_id: string; name: string; quantity: number; owned: number }[]
+  removed: { oracle_id: string; name: string; quantity: number }[]
+  changed: { oracle_id: string; name: string; from: number; to: number }[]
+  /** cards that gain tags from the cube (local tags are kept) */
+  retagged: { oracle_id: string; name: string; tags: string[] }[]
+  /** cards whose copies marked as in the cube changed; `from` is null when not known yet */
+  restatused: { oracle_id: string; name: string; from: number | null; to: number; quantity: number }[]
+  /** custom cards or ids Scryfall does not know: skipped */
+  unresolved: string[]
+  /** cards in the list before the sync */
+  list_size: number
 }

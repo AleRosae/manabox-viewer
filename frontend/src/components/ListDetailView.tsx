@@ -1,54 +1,47 @@
 import * as Popover from '@radix-ui/react-popover'
 import clsx from 'clsx'
-import { AlertTriangle, ChevronDown, Download, LayoutGrid, Minus, Pencil, Plus, Rows3, Share2, Trash2, Users } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Download, ExternalLink, LayoutGrid, Link2, Minus, Pencil, Plus, RefreshCw, Rows3, Share2, Tag, Trash2, Users } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '../lib/api'
-import { BUCKET_COLOR, BUCKET_LABEL, BUCKET_ORDER, colorBucket, fmtEur, fmtNum, isLand, marketPrice, primaryType } from '../lib/cards'
+import { BUCKET_COLOR, BUCKET_LABEL, fmtEur, fmtNum, isLand, marketPrice } from '../lib/cards'
 import { hasComparison } from '../lib/compare'
+import { GROUP_LABEL, type GroupBy, groupItems, hasTag, listTags } from '../lib/listGroups'
 import { computeStats } from '../lib/stats'
 import type { ListDetail, ListItem } from '../lib/types'
 import { useData, useUsdRate } from '../store/data'
 import { CardDetailDrawer } from './CardDetailDrawer'
 import { CardImage } from './CardImage'
 import { CardSearchAdd } from './CardSearchAdd'
+import { CubeSyncDialog } from './CubeSyncDialog'
 import { useHoverPreview } from './HoverPreview'
 import { ListCompareView } from './ListCompareView'
 import { StatsView } from './StatsView'
+import { TagEditor } from './TagEditor'
 
 type OwnFilter = 'all' | 'owned' | 'partial' | 'not_owned' | 'overused'
-type GroupBy = 'color' | 'type' | 'mv'
 type Tab = 'cards' | 'stats' | 'compare'
 
 const TAB_LABEL: Record<Tab, string> = { cards: 'Cards', stats: 'Stats', compare: 'Compare' }
 
-const TYPE_ORDER = ['Creature', 'Planeswalker', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Battle', 'Land', 'Other']
-const TYPE_LABEL: Record<string, string> = {
-  Creature: 'Creature', Planeswalker: 'Planeswalker', Instant: 'Instant', Sorcery: 'Sorcery', Artifact: 'Artifact',
-  Enchantment: 'Enchantment', Battle: 'Battle', Land: 'Lands', Other: 'Other',
-}
-
 const isOverused = (i: ListItem) => i.owned > 0 && i.quantity + i.used_elsewhere > i.owned
 
-function groupItems(items: ListItem[], by: GroupBy) {
-  const groups = new Map<string, ListItem[]>()
-  const keyOf = (i: ListItem) =>
-    by === 'color' ? colorBucket(i.card) : by === 'type' ? primaryType(i.card) : isLand(i.card) ? 'L' : String(Math.min(7, Math.floor(i.card.cmc)))
-  for (const i of items) {
-    const k = keyOf(i)
-    groups.set(k, [...(groups.get(k) ?? []), i])
-  }
-  const order = by === 'color' ? BUCKET_ORDER : by === 'type' ? TYPE_ORDER : ['0', '1', '2', '3', '4', '5', '6', '7', 'L']
-  return order
-    .filter((k) => groups.has(k))
-    .map((k) => ({
-      key: k,
-      title: by === 'color' ? BUCKET_LABEL[k] : by === 'type' ? TYPE_LABEL[k] : k === 'L' ? 'Lands' : k === '7' ? 'MV 7+' : `MV ${k}`,
-      color: by === 'color' ? BUCKET_COLOR[k] : '#3A3F4B',
-      items: groups.get(k)!.sort((a, b) => a.card.cmc - b.card.cmc || a.card.name.localeCompare(b.card.name)),
-    }))
+/** "owned/copies" (just copies when all owned) shown in each group header. */
+function GroupCount({ copies, owned, missingValue }: { copies: number; owned: number; missingValue: number }) {
+  return (
+    <span className="shrink-0 font-mono text-xs font-normal text-dim" title={`${owned} of ${copies} copies owned${missingValue > 0 ? `, ${fmtEur(missingValue)} to complete` : ''}`}>
+      {owned < copies ? `${owned}/${copies}` : copies}
+    </span>
+  )
 }
+
+const MissingValue = ({ value }: { value: number }) =>
+  value > 0 ? <span className="font-mono text-[11px] font-normal text-soft">{fmtEur(value)} to complete</span> : null
+
+/** Shown while the hover controls of a row/tile are visible: on hover or while the tag popover is open. */
+const SHOW_CONTROLS = 'group-hover:flex group-has-[[data-state=open]]:flex'
+const HIDE_ON_CONTROLS = 'group-hover:hidden group-has-[[data-state=open]]:hidden'
 
 function OwnershipPill({ item }: { item: ListItem }) {
   if (item.ownership === 'not_owned') return <span className="pill bg-[#2A2D35] text-muted">NOT OWNED</span>
@@ -69,24 +62,33 @@ function OwnershipPill({ item }: { item: ListItem }) {
 
 interface ItemProps {
   item: ListItem
+  listId: number
+  knownTags: string[]
   onQty: (item: ListItem, q: number) => void
   onOpen: (item: ListItem) => void
 }
 
-function ItemRow({ item, onQty, onOpen }: ItemProps) {
+function ItemRow({ item, listId, knownTags, onQty, onOpen }: ItemProps) {
   const hover = useHoverPreview(item.card, item.ownership === 'not_owned')
   const notOwned = item.ownership === 'not_owned'
   return (
     <div className={clsx('group flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[13px] hover:bg-panel-2', isOverused(item) && 'bg-warn-bg', notOwned && 'opacity-50 hover:opacity-80')}>
-      <button type="button" className={clsx('min-w-0 flex-1 truncate text-left', notOwned && 'italic text-muted')} onClick={() => onOpen(item)} {...hover}>
+      <button
+        type="button"
+        className={clsx('min-w-0 flex-1 truncate text-left', notOwned && 'italic text-muted')}
+        title={item.tags.length ? `Tags: ${item.tags.join(', ')}` : undefined}
+        onClick={() => onOpen(item)}
+        {...hover}
+      >
         {item.quantity > 1 && <span className="mr-1 font-mono text-dim">{item.quantity}×</span>}
         {item.card.name}
       </button>
-      <span className="group-hover:hidden">
+      <span className={HIDE_ON_CONTROLS}>
         <OwnershipPill item={item} />
       </span>
-      <span className="font-mono text-[11px] text-dim group-hover:hidden">{isLand(item.card) ? '' : item.card.cmc}</span>
-      <span className="hidden items-center gap-0.5 group-hover:flex">
+      <span className={clsx('font-mono text-[11px] text-dim', HIDE_ON_CONTROLS)}>{isLand(item.card) ? '' : item.card.cmc}</span>
+      <span className={clsx('hidden items-center gap-0.5', SHOW_CONTROLS)}>
+        <TagEditor listId={listId} item={item} known={knownTags} className="h-6 w-6" />
         <button type="button" aria-label={`Remove a copy of ${item.card.name}`} className="flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-chip hover:text-fg" onClick={() => onQty(item, item.quantity - 1)}>
           {item.quantity > 1 ? <Minus size={13} /> : <Trash2 size={13} />}
         </button>
@@ -98,7 +100,7 @@ function ItemRow({ item, onQty, onOpen }: ItemProps) {
   )
 }
 
-function ItemTile({ item, onQty, onOpen }: ItemProps) {
+function ItemTile({ item, listId, knownTags, onQty, onOpen }: ItemProps) {
   const notOwned = item.ownership === 'not_owned'
   const hover = useHoverPreview(item.card, notOwned)
   return (
@@ -111,7 +113,8 @@ function ItemTile({ item, onQty, onOpen }: ItemProps) {
           </span>
         )}
         {item.quantity > 1 && <span className="absolute left-2 top-2 rounded-md bg-accent px-1.5 py-px font-mono text-[11px] font-bold text-accent-ink">×{item.quantity}</span>}
-        <div className="absolute inset-x-2 bottom-2 flex justify-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute inset-x-2 bottom-2 flex justify-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-has-[[data-state=open]]:opacity-100">
+          <TagEditor listId={listId} item={item} known={knownTags} className="h-8 w-8 rounded-lg bg-bg/90" />
           <button type="button" aria-label="Remove a copy" className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg/90 hover:bg-chip" onClick={(e) => { e.stopPropagation(); onQty(item, item.quantity - 1) }}>
             {item.quantity > 1 ? <Minus size={14} /> : <Trash2 size={14} />}
           </button>
@@ -124,6 +127,15 @@ function ItemTile({ item, onQty, onOpen }: ItemProps) {
         <span className="truncate text-dim">{item.card.name}</span>
         <OwnershipPill item={item} />
       </div>
+      {item.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 px-0.5">
+          {item.tags.map((t) => (
+            <span key={t} className="rounded-full bg-chip px-1.5 py-px text-[10px] text-soft">
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -142,6 +154,8 @@ export function ListDetailView({ listId }: { listId: number }) {
   const [includeNotOwned, setIncludeNotOwned] = useState(true)
   const [editing, setEditing] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
 
   const reload = useCallback(() => {
     api.list(listId).then(
@@ -165,8 +179,13 @@ export function ListDetailView({ listId }: { listId: number }) {
     }),
     [items],
   )
-  const shown = useMemo(() => (own === 'all' ? items : own === 'overused' ? items.filter(isOverused) : items.filter((i) => i.ownership === own)), [items, own])
-  const groups = useMemo(() => groupItems(shown, groupBy), [shown, groupBy])
+  const tags = useMemo(() => listTags(items), [items])
+  const activeTag = tagFilter ? (tags.find((t) => t.toLowerCase() === tagFilter.toLowerCase()) ?? null) : null
+  const shown = useMemo(() => {
+    const byOwn = own === 'all' ? items : own === 'overused' ? items.filter(isOverused) : items.filter((i) => i.ownership === own)
+    return activeTag ? byOwn.filter((i) => hasTag(i, activeTag)) : byOwn
+  }, [items, own, activeTag])
+  const groups = useMemo(() => groupItems(shown, groupBy, (i) => marketPrice(i.card, 'normal', rate) ?? 0), [shown, groupBy, rate])
   const copies = items.reduce((n, i) => n + i.quantity, 0)
   const value = items.reduce((n, i) => n + (marketPrice(i.card, 'normal', rate) ?? 0) * i.quantity, 0)
 
@@ -201,7 +220,9 @@ export function ListDetailView({ listId }: { listId: number }) {
 
   const detailCard = detailId ? (items.find((i) => i.scryfall_id === detailId)?.card ?? null) : null
   const overused = items.filter(isOverused)
-  const comparable = hasComparison(items)
+  // A linked cube compares the collection with what CubeCobra marks as owned; otherwise with the sharer's copies.
+  const compareItems = list.cubecobra_id ? items.map((i) => ({ ...i, their_owned: i.cube_owned })) : items
+  const comparable = hasComparison(compareItems)
   const tabs: Tab[] = comparable ? ['cards', 'stats', 'compare'] : ['cards', 'stats']
 
   return (
@@ -243,6 +264,14 @@ export function ListDetailView({ listId }: { listId: number }) {
               </button>
             </div>
           )}
+          {list.cubecobra_id && (
+            <span className="flex items-center gap-1.5 text-[13px] text-soft">
+              <a className="flex items-center gap-1 text-accent hover:text-accent-hi" href={`https://cubecobra.com/cube/list/${list.cubecobra_id}`} target="_blank" rel="noreferrer">
+                CubeCobra · {list.cubecobra_id} <ExternalLink size={12} />
+              </a>
+              {list.synced_at && <span className="text-dim">synced {new Date(list.synced_at).toLocaleString()}</span>}
+            </span>
+          )}
           {list.shared_by && (
             <span className="flex items-center gap-1.5 text-[13px] text-soft">
               <Users size={14} className="text-accent" /> Shared by <strong className="font-semibold">{list.shared_by}</strong>
@@ -254,6 +283,11 @@ export function ListDetailView({ listId }: { listId: number }) {
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
+          {list.cubecobra_id && (
+            <button type="button" className="btn" onClick={() => setSyncing(true)} title="Update the list from its CubeCobra cube">
+              <RefreshCw size={15} /> Sync
+            </button>
+          )}
           <a className="btn" href={api.exportUrl(listId, 'viewer')} download title="ManaBox Viewer list with your ownership: another user can import it and compare">
             <Share2 size={15} /> Share
           </a>
@@ -276,6 +310,32 @@ export function ListDetailView({ listId }: { listId: number }) {
                   <span className="text-sm">Missing cards .txt</span>
                   <span className="text-xs text-dim">only the copies you don't own</span>
                 </a>
+                <div className="my-1 border-t border-line" />
+                {list.cubecobra_id ? (
+                  <button
+                    type="button"
+                    className="flex flex-col rounded-lg px-3 py-2 text-left hover:bg-panel-2"
+                    onClick={async () => {
+                      if (!window.confirm('Unlink the list from its CubeCobra cube? The cards stay.')) return
+                      try {
+                        await api.updateList(listId, { cubecobra_id: '' })
+                        await listsChanged()
+                      } catch (e) {
+                        toast.error((e as Error).message)
+                      }
+                    }}
+                  >
+                    <span className="text-sm">Unlink from CubeCobra</span>
+                    <span className="text-xs text-dim">keep the cards, stop syncing</span>
+                  </button>
+                ) : (
+                  <button type="button" className="flex flex-col rounded-lg px-3 py-2 text-left hover:bg-panel-2" onClick={() => setSyncing(true)}>
+                    <span className="flex items-center gap-1.5 text-sm">
+                      <Link2 size={14} /> Link to CubeCobra cube…
+                    </span>
+                    <span className="text-xs text-dim">sync the cards and tags from a cube URL</span>
+                  </button>
+                )}
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>
@@ -329,9 +389,11 @@ export function ListDetailView({ listId }: { listId: number }) {
             <label className="flex items-center gap-2 text-[13px] text-muted">
               Group by
               <select className="field min-h-9" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
-                <option value="color">Color</option>
-                <option value="type">Type</option>
-                <option value="mv">Mana value</option>
+                {(Object.keys(GROUP_LABEL) as GroupBy[]).map((g) => (
+                  <option key={g} value={g}>
+                    {GROUP_LABEL[g]}
+                  </option>
+                ))}
               </select>
             </label>
             <div role="group" aria-label="View" className="flex rounded-[9px] border border-line bg-[#15171D] p-[3px]">
@@ -365,6 +427,19 @@ export function ListDetailView({ listId }: { listId: number }) {
                 </button>
               ))}
             </div>
+            {tags.length > 0 && (
+              <label className="flex items-center gap-2 text-[13px] text-muted">
+                <Tag size={14} />
+                <select className="field min-h-[34px]" aria-label="Filter by tag" value={activeTag ?? ''} onChange={(e) => setTagFilter(e.target.value || null)}>
+                  <option value="">All tags</option>
+                  {tags.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
 
           {items.length > 0 && (
@@ -396,13 +471,16 @@ export function ListDetailView({ listId }: { listId: number }) {
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] items-start gap-3.5">
               {groups.map((g) => (
                 <section key={g.key} className="overflow-hidden rounded-xl border border-line bg-panel">
-                  <div className="flex items-center justify-between border-t-[3px] bg-[#171920] px-3 py-2.5" style={{ borderTopColor: g.color }}>
-                    <h2 className="m-0 text-[13px] font-semibold">{g.title}</h2>
-                    <span className="font-mono text-xs text-dim">{g.items.reduce((n, i) => n + i.quantity, 0)}</span>
+                  <div className="border-t-[3px] bg-[#171920] px-3 py-2.5" style={{ borderTopColor: g.color }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <h2 className="m-0 truncate text-[13px] font-semibold">{g.title}</h2>
+                      <GroupCount copies={g.copies} owned={g.owned} missingValue={g.missingValue} />
+                    </div>
+                    <MissingValue value={g.missingValue} />
                   </div>
                   <div className="p-1.5">
                     {g.items.map((i) => (
-                      <ItemRow key={i.id} item={i} onQty={setQty} onOpen={(it) => setDetailId(it.scryfall_id)} />
+                      <ItemRow key={i.id} item={i} listId={listId} knownTags={tags} onQty={setQty} onOpen={(it) => setDetailId(it.scryfall_id)} />
                     ))}
                   </div>
                 </section>
@@ -412,13 +490,16 @@ export function ListDetailView({ listId }: { listId: number }) {
             <div className="flex flex-col gap-6">
               {groups.map((g) => (
                 <section key={g.key} className="flex flex-col gap-3">
-                  <h2 className="m-0 flex items-center gap-2 text-sm font-semibold">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} />
-                    {g.title} <span className="font-mono text-xs font-normal text-dim">{g.items.reduce((n, i) => n + i.quantity, 0)}</span>
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="m-0 flex items-center gap-2 text-sm font-semibold">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} />
+                      {g.title} <GroupCount copies={g.copies} owned={g.owned} missingValue={g.missingValue} />
+                    </h2>
+                    <MissingValue value={g.missingValue} />
+                  </div>
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
                     {g.items.map((i) => (
-                      <ItemTile key={i.id} item={i} onQty={setQty} onOpen={(it) => setDetailId(it.scryfall_id)} />
+                      <ItemTile key={i.id} item={i} listId={listId} knownTags={tags} onQty={setQty} onOpen={(it) => setDetailId(it.scryfall_id)} />
                     ))}
                   </div>
                 </section>
@@ -427,7 +508,12 @@ export function ListDetailView({ listId }: { listId: number }) {
           )}
         </>
       ) : tab === 'compare' && comparable ? (
-        <ListCompareView items={items} sharedBy={list.shared_by} onOpen={(it) => setDetailId(it.scryfall_id)} />
+        <ListCompareView
+          items={compareItems}
+          sharedBy={list.cubecobra_id ? 'CubeCobra' : list.shared_by}
+          note={list.cubecobra_id ? 'owned, proxied or borrowed, as of the last sync' : 'ownership as of their export'}
+          onOpen={(it) => setDetailId(it.scryfall_id)}
+        />
       ) : (
         <>
           <label className="flex items-center gap-2 self-start text-[13px] text-muted">
@@ -439,6 +525,7 @@ export function ListDetailView({ listId }: { listId: number }) {
       )}
 
       <CardDetailDrawer card={detailCard} onClose={() => setDetailId(null)} />
+      {syncing && <CubeSyncDialog listId={listId} cubeId={list.cubecobra_id} onClose={() => setSyncing(false)} />}
     </>
   )
 }

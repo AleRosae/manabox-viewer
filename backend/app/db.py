@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS lists (
     description TEXT NOT NULL DEFAULT '',
     kind TEXT NOT NULL DEFAULT 'generic',   -- cube | generic
     shared_by TEXT,                         -- set when imported from someone else's list
+    cubecobra_id TEXT,                      -- linked CubeCobra cube, synced on demand
+    synced_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -75,6 +77,8 @@ CREATE TABLE IF NOT EXISTS list_items (
     preferred_scryfall_id TEXT NOT NULL,
     quantity INTEGER NOT NULL,
     their_owned INTEGER,                    -- copies the sharer owned; NULL when unknown
+    tags TEXT NOT NULL DEFAULT '[]',        -- JSON array of labels (CubeCobra tags)
+    cube_statuses TEXT,                     -- JSON array: CubeCobra status of each copy; NULL when unknown
     added_at TEXT NOT NULL,
     UNIQUE (list_id, oracle_id)
 );
@@ -114,6 +118,10 @@ def get_conn() -> Iterator[sqlite3.Connection]:
 ADDED_COLUMNS = [
     ("lists", "shared_by", "TEXT"),
     ("list_items", "their_owned", "INTEGER"),
+    ("lists", "cubecobra_id", "TEXT"),
+    ("lists", "synced_at", "TEXT"),
+    ("list_items", "tags", "TEXT NOT NULL DEFAULT '[]'"),
+    ("list_items", "cube_statuses", "TEXT"),
 ]
 
 

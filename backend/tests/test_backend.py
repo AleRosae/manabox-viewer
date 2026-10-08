@@ -5,7 +5,9 @@ import pytest
 
 from app.csv_import import CsvFormatError, parse_manabox_csv
 from app.importer import compute_diff
-from app.list_import import parse_list_text
+from app.cubecobra import parse_cube_ref
+from app.exporters import copy_statuses
+from app.list_import import normalize_tags, parse_list_text
 from conftest import fake_card
 
 HEADER = [
@@ -239,6 +241,167 @@ def test_list_import_and_viewer_round_trip(api, fake_scryfall):
 
     missing = api.get(f"/api/lists/{created['id']}/export?format=missing").text
     assert missing == "1 Black Lotus (TST) 232\n"
+
+
+def test_viewer_format_carries_tags(api, fake_scryfall):
+    _share_setup(api, fake_scryfall)
+    created = api.post("/api/lists/import", json={
+        "name": "Tagged", "kind": "cube",
+        "items": [{"scryfall_id": ID_A, "quantity": 1, "tags": ["Blue", "Cantrip"]},
+                  {"scryfall_id": ID_A, "quantity": 1, "tags": ["cantrip", "Tempo"]}],
+    }).json()
+    [item] = api.get(f"/api/lists/{created['id']}").json()["items"]
+    assert (item["quantity"], item["tags"]) == (2, ["Blue", "Cantrip", "Tempo"])
+    exported = api.get(f"/api/lists/{created['id']}/export?format=viewer").text
+    assert "2 Opt (TST) 1 | owned 2 | tags: Blue; Cantrip; Tempo" in exported
+    back = api.post("/api/lists/import/preview", json={"text": exported}).json()
+    assert back["items"][0]["tags"] == ["Blue", "Cantrip", "Tempo"]
+
+
+# --- tags & CubeCobra ---------------------------------------------------------------------------
+
+def test_normalize_tags_and_cube_refs():
+    assert normalize_tags([" Aggro ", "aggro", "", "Burn;Red", "x" * 50]) == ["Aggro", "Burn Red", "x" * 40]
+    assert normalize_tags("Burn") == ["Burn"]
+    assert normalize_tags(['=HYPERLINK("x")', "@me", "+2"]) == ['HYPERLINK("x")', "me", "2"]
+    assert parse_cube_ref("https://cubecobra.com/cube/list/vintagecube?view=table") == "vintagecube"
+    assert parse_cube_ref("cubecobra.com/cube/overview/5d9bde692336c66ef4b21f5c") == "5d9bde692336c66ef4b21f5c"
+    assert parse_cube_ref("  mycube ") == "mycube"
+    assert parse_cube_ref("https://example.com/not a cube") is None
+
+
+def test_item_tags_patch_and_cubecobra_export(api, fake_scryfall):
+    fake_scryfall.add(fake_card(ID_A, "Opt"))
+    lst = api.post("/api/lists", json={"name": "Cubo", "kind": "cube"}).json()
+    api.post(f"/api/lists/{lst['id']}/items/bulk", json={"items": [{"scryfall_id": ID_A, "quantity": 2}]})
+    [item] = api.get(f"/api/lists/{lst['id']}").json()["items"]
+    assert item["tags"] == []
+    api.patch(f"/api/lists/{lst['id']}/items/{item['id']}", json={"tags": ["Cantrip", " cantrip", "Blue"]})
+    [item] = api.get(f"/api/lists/{lst['id']}").json()["items"]
+    assert item["tags"] == ["Cantrip", "Blue"]
+
+    rows = list(csv.DictReader(io.StringIO(api.get(f"/api/lists/{lst['id']}/export?format=cubecobra_csv").text)))
+    assert len(rows) == 2
+    assert (rows[0]["tags"], rows[0]["board"], rows[0]["status"]) == ("Cantrip;Blue", "mainboard", "Not Owned")
+
+
+def _cube_setup(api, fake_scryfall, fake_cubecobra):
+    fake_scryfall.add(fake_card(ID_A, "Opt"))
+    fake_scryfall.add(fake_card(ID_B, "Counterspell", number="2"))
+    fake_scryfall.add(fake_card(ID_C, "Black Lotus", number="232", rarity="rare"))
+    upload(api, [row("Opt", ID_A, qty=1)])
+    fake_cubecobra.add("mycube", "My Cube", [
+        (ID_A, ["Cantrip"]), (ID_A, ["Blue"]),     # two copies: merged, tags united
+        (ID_C, []),
+        ("custom-card", ["Custom"]),               # not a Scryfall card
+    ])
+
+
+def test_cubecobra_preview_and_linked_import(api, fake_scryfall, fake_cubecobra):
+    _cube_setup(api, fake_scryfall, fake_cubecobra)
+    body = api.post("/api/lists/cubecobra/preview", json={"url": "https://cubecobra.com/cube/list/mycube"}).json()
+    assert body["meta"] == {"name": "My Cube", "kind": "cube", "has_ownership": False, "cubecobra_id": "mycube"}
+    items = {i["card"]["name"]: i for i in body["items"]}
+    assert (items["Opt"]["quantity"], items["Opt"]["ownership"], items["Opt"]["tags"]) == (2, "partial", ["Cantrip", "Blue"])
+    assert items["Black Lotus"]["ownership"] == "not_owned"
+    assert body["unresolved"] == ["custom-card"]
+
+    assert api.post("/api/lists/cubecobra/preview", json={"url": "missing"}).status_code == 502
+    assert api.post("/api/lists/cubecobra/preview", json={"url": "not a cube!"}).status_code == 422
+
+    created = api.post("/api/lists/import", json={
+        "name": "My Cube", "kind": "cube", "cubecobra_id": "mycube",
+        "items": [{"scryfall_id": i["scryfall_id"], "quantity": i["quantity"], "tags": i["tags"]} for i in body["items"]],
+    }).json()
+    assert created["cubecobra_id"] == "mycube" and created["synced_at"]
+
+
+def test_cubecobra_sync_diff_and_apply(api, fake_scryfall, fake_cubecobra):
+    _cube_setup(api, fake_scryfall, fake_cubecobra)
+    lst = api.post("/api/lists", json={"name": "Mine", "kind": "cube"}).json()
+    api.post(f"/api/lists/{lst['id']}/items/bulk", json={"items": [
+        {"scryfall_id": ID_A, "quantity": 1}, {"scryfall_id": ID_B, "quantity": 1}]})
+    opt = next(i for i in api.get(f"/api/lists/{lst['id']}").json()["items"] if i["card"]["name"] == "Opt")
+    api.patch(f"/api/lists/{lst['id']}/items/{opt['id']}", json={"tags": ["Mine"]})
+
+    # Not linked yet.
+    assert api.post(f"/api/lists/{lst['id']}/sync", json={}).status_code == 422
+
+    diff = api.post(f"/api/lists/{lst['id']}/sync", json={"cube": "mycube"}).json()
+    assert diff["applied"] is False and diff["cube"]["name"] == "My Cube"
+    strip = lambda lines: [{k: v for k, v in l.items() if k != "oracle_id"} for l in lines]  # noqa: E731
+    assert strip(diff["added"]) == [{"name": "Black Lotus", "quantity": 1, "owned": 0}]
+    assert strip(diff["removed"]) == [{"name": "Counterspell", "quantity": 1}]
+    assert strip(diff["changed"]) == [{"name": "Opt", "from": 1, "to": 2}]
+    assert strip(diff["retagged"]) == [{"name": "Opt", "tags": ["Cantrip", "Blue"]}]
+    assert diff["list_size"] == 2
+    assert api.get(f"/api/lists/{lst['id']}").json()["cubecobra_id"] is None  # preview saves nothing
+
+    api.post(f"/api/lists/{lst['id']}/sync", json={"cube": "mycube", "apply": True})
+    detail = api.get(f"/api/lists/{lst['id']}").json()
+    assert detail["cubecobra_id"] == "mycube" and detail["synced_at"]
+    items = {i["card"]["name"]: (i["quantity"], i["tags"]) for i in detail["items"]}
+    assert items == {"Opt": (2, ["Mine", "Cantrip", "Blue"]), "Black Lotus": (1, [])}
+
+    again = api.post(f"/api/lists/{lst['id']}/sync", json={}).json()
+    assert again["added"] == again["removed"] == again["changed"] == again["retagged"] == []
+
+    # A cube with no recognisable cards must never wipe the list.
+    fake_cubecobra.add("emptycube", "Empty", [("custom-card", [])])
+    assert api.post(f"/api/lists/{lst['id']}/sync", json={"cube": "emptycube", "apply": True}).status_code == 502
+    assert len(api.get(f"/api/lists/{lst['id']}").json()["items"]) == 2
+
+    # Re-sending the same cube keeps synced_at; "" unlinks.
+    api.patch(f"/api/lists/{lst['id']}", json={"cubecobra_id": "https://cubecobra.com/cube/list/mycube"})
+    assert api.get(f"/api/lists/{lst['id']}").json()["synced_at"]
+    api.patch(f"/api/lists/{lst['id']}", json={"cubecobra_id": ""})
+    assert api.get(f"/api/lists/{lst['id']}").json()["cubecobra_id"] is None
+
+
+def test_copy_statuses_for_export():
+    # No CubeCobra data: owned copies first.
+    assert copy_statuses(3, 1, None) == ["Owned", "Not Owned", "Not Owned"]
+    # My copies take the real ones (Premium Owned kept), then proxies become Owned; the rest keep their status.
+    assert copy_statuses(3, 2, ["Proxied", "Premium Owned", "Ordered"]) == ["Premium Owned", "Owned", "Ordered"]
+    assert copy_statuses(2, 0, ["Owned", "Proxied"]) == ["Owned", "Proxied"]
+    assert copy_statuses(2, 5, ["Not Owned"]) == ["Owned", "Owned"]
+
+
+def test_cube_statuses_compare_sync_and_export(api, fake_scryfall, fake_cubecobra):
+    fake_scryfall.add(fake_card(ID_A, "Opt"))
+    fake_scryfall.add(fake_card(ID_C, "Black Lotus", number="232"))
+    upload(api, [row("Opt", ID_A, qty=1)])
+    fake_cubecobra.add("statcube", "Stat Cube", [
+        (ID_A, [], "Not Owned"), (ID_A, [], "Proxied"),
+        (ID_C, [], "Borrowed"),
+    ])
+    preview = api.post("/api/lists/cubecobra/preview", json={"url": "statcube"}).json()
+    created = api.post("/api/lists/import", json={
+        "name": "S", "kind": "cube", "cubecobra_id": "statcube",
+        "items": [{"scryfall_id": i["scryfall_id"], "quantity": i["quantity"], "tags": [],
+                   "cube_statuses": i["cube_statuses"]} for i in preview["items"]],
+    }).json()
+    items = {i["card"]["name"]: i for i in api.get(f"/api/lists/{created['id']}").json()["items"]}
+    assert (items["Opt"]["cube_statuses"], items["Opt"]["cube_owned"], items["Opt"]["owned"]) == (["Proxied", "Not Owned"], 1, 1)
+    assert items["Black Lotus"]["cube_owned"] == 1
+
+    rows = list(csv.DictReader(io.StringIO(api.get(f"/api/lists/{created['id']}/export?format=cubecobra_csv").text)))
+    assert sorted((r["name"], r["status"]) for r in rows) == [
+        ("Black Lotus", "Borrowed"), ("Opt", "Not Owned"), ("Opt", "Owned")]
+
+    # Statuses changed on CubeCobra show in the diff and are applied.
+    fake_cubecobra.add("statcube", "Stat Cube", [(ID_A, [], "Owned"), (ID_A, [], "Owned"), (ID_C, [], "Borrowed")])
+    diff = api.post(f"/api/lists/{created['id']}/sync", json={}).json()
+    assert [(d["name"], d["from"], d["to"]) for d in diff["restatused"]] == [("Opt", 1, 2)]
+    api.post(f"/api/lists/{created['id']}/sync", json={"apply": True})
+    items = {i["card"]["name"]: i for i in api.get(f"/api/lists/{created['id']}").json()["items"]}
+    assert items["Opt"]["cube_owned"] == 2
+
+    # Lists without CubeCobra data have no cube statuses.
+    lst = api.post("/api/lists", json={"name": "Plain"}).json()
+    api.post(f"/api/lists/{lst['id']}/items/bulk", json={"items": [{"scryfall_id": ID_A, "quantity": 1}]})
+    [plain] = api.get(f"/api/lists/{lst['id']}").json()["items"]
+    assert (plain["cube_statuses"], plain["cube_owned"]) == (None, None)
 
 
 def test_legacy_db_is_renamed_and_migrated(tmp_path, monkeypatch):

@@ -10,6 +10,7 @@ STATIC_DIR = Path(os.environ.get("STATIC_DIR", Path(__file__).resolve().parents[
 
 SCRYFALL_API = "https://api.scryfall.com"
 SCRYFALL_DELAY = float(os.environ.get("SCRYFALL_DELAY", "0.2"))
+CUBECOBRA_URL = "https://cubecobra.com"
 USER_AGENT = "ManaBoxViewer/0.1 (personal collection browser)"
 
 # Used by the frontend to convert USD prices when a card has no EUR price.

@@ -54,9 +54,13 @@ Stats cover market and purchase value, colors, mana curve, rarity, types, sets, 
 - **Cards by name, not printing:** lists track cards by name, so they stay linked to your collection across new imports.
 - **Cards you don't own:** you can add them from a Scryfall search. They are shown dimmed and flagged *Not owned*, or *1/2* when you own fewer copies than the list needs.
 - **Overuse warning:** you are warned when a card is used in more lists than the copies you own.
-- **List views:** cube-style columns by color, type or mana value; an image view; and per-list stats.
+- **List views:** cube-style columns by color, type, mana value, rarity or tag; an image view; and per-list stats. Each group header shows how many copies you own and what the missing ones cost.
+- **Tags:** label cards with any tags (CubeCobra's *tags*), filter the list by tag and group by it. Tags travel with the CubeCobra CSV and the *Share* file.
+- **CubeCobra sync:** import a public cube from its URL (*Import list*) or link an existing list to one (*Export → Link to CubeCobra cube…*), then see right away which cards you're missing. **Sync** shows what changed on CubeCobra (cards added, removed, new tags) before applying it; the cube decides the cards, while its tags are added to yours (tags removed on CubeCobra are kept locally; a card holds at most 20 tags). A sync that would find no recognisable cards in the cube is refused, so it can't empty the list.
+- **You vs CubeCobra:** a linked cube gets a **Compare** tab that sets your collection against what CubeCobra marks as owned (owned, proxied or borrowed count the same): cards you own but CubeCobra doesn't know yet, cards marked owned on CubeCobra but missing from your collection, and so on.
+- **Owned status on export:** the CubeCobra CSV marks the copies in your collection as *Owned* (keeping *Premium Owned*); the other copies keep their CubeCobra status (*Proxied*, *Ordered*, *Borrowed*...) or are *Not Owned*. Re-uploading it brings CubeCobra up to date with your collection.
 - **Exports:**
-  - **CubeCobra CSV**, for *Replace with CSV file upload*;
+  - **CubeCobra CSV** with tags, for *Replace with CSV file upload*;
   - plain **`.txt`** (`1 Name (SET) 123`);
   - a **missing cards** `.txt` you can use as a shopping list.
 
@@ -72,7 +76,7 @@ Stats cover market and purchase value, colors, mana curve, rarity, types, sets, 
 # name: Pauper Cube
 # kind: cube
 # exported: 2026-10-07
-2 Lightning Bolt (2X2) 117 | owned 1
+2 Lightning Bolt (2X2) 117 | owned 1 | tags: Burn; Aggro
 1 Counterspell (MH2) 267 | owned 0
 ```
 

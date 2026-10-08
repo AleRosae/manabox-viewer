@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import clsx from 'clsx'
-import { FileUp, X } from 'lucide-react'
+import { FileUp, Link2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -45,6 +45,7 @@ export function ImportListDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [kind, setKind] = useState<ListKind>('cube')
   const [sharedBy, setSharedBy] = useState('')
+  const [cubeUrl, setCubeUrl] = useState('')
 
   const runPreview = async (source: string, file: string | null) => {
     if (!source.trim()) return
@@ -58,6 +59,26 @@ export function ImportListDialog({ onClose }: { onClose: () => void }) {
       setPreview(p)
       setName(p.meta.name ?? (file ? baseName(file) : 'Imported list'))
       setKind(p.meta.kind ?? 'cube')
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const runCubePreview = async () => {
+    if (!cubeUrl.trim()) return
+    setBusy(true)
+    try {
+      const p = await api.previewCube(cubeUrl.trim())
+      if (!p.items.length) {
+        toast.error('The cube has no cards')
+        return
+      }
+      setPreview(p)
+      setFilename(null)
+      setName(p.meta.name ?? 'CubeCobra cube')
+      setKind('cube')
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -90,7 +111,14 @@ export function ImportListDialog({ onClose }: { onClose: () => void }) {
         name: name.trim(),
         kind,
         shared_by: preview.meta.has_ownership ? sharedBy.trim() || null : null,
-        items: items.map((i) => ({ scryfall_id: i.scryfall_id, quantity: i.quantity, their_owned: i.their_owned })),
+        cubecobra_id: preview.meta.cubecobra_id ?? null,
+        items: items.map((i) => ({
+          scryfall_id: i.scryfall_id,
+          quantity: i.quantity,
+          their_owned: i.their_owned,
+          tags: i.tags,
+          cube_statuses: i.cube_statuses,
+        })),
       })
       await useData.getState().listsChanged()
       toast.success(`Imported “${list.name}”: ${fmtNum(copies)} cards`)
@@ -112,8 +140,8 @@ export function ImportListDialog({ onClose }: { onClose: () => void }) {
               <Dialog.Title className="m-0 text-base font-semibold">Import list</Dialog.Title>
               <Dialog.Description className="m-0 mt-0.5 text-xs text-dim">
                 {preview
-                  ? `${fmtNum(items.length)} cards · ${fmtNum(copies)} copies${filename ? ` · ${filename}` : ''}`
-                  : 'A .txt list: a ManaBox Viewer share file (.mbv.txt) or plain “1 Name (SET) 123” lines'}
+                  ? `${fmtNum(items.length)} cards · ${fmtNum(copies)} copies${filename ? ` · ${filename}` : ''}${preview.meta.cubecobra_id ? ' · linked to CubeCobra, sync it any time' : ''}`
+                  : 'A CubeCobra cube, a ManaBox Viewer share file (.mbv.txt) or plain “1 Name (SET) 123” lines'}
               </Dialog.Description>
             </div>
             <Dialog.Close className="btn btn-ghost btn-icon -mr-2 -mt-2" aria-label="Close">
@@ -123,6 +151,27 @@ export function ImportListDialog({ onClose }: { onClose: () => void }) {
 
           {!preview ? (
             <>
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void runCubePreview()
+                }}
+              >
+                <span className="flex flex-1 items-center gap-2 rounded-[9px] border border-line bg-panel-2 pl-3">
+                  <Link2 size={15} className="shrink-0 text-accent" />
+                  <input
+                    className="min-h-9 flex-1 bg-transparent text-sm outline-none"
+                    aria-label="CubeCobra cube URL"
+                    placeholder="CubeCobra cube URL, e.g. https://cubecobra.com/cube/list/…"
+                    value={cubeUrl}
+                    onChange={(e) => setCubeUrl(e.target.value)}
+                  />
+                </span>
+                <button type="submit" className="btn" disabled={busy || !cubeUrl.trim()}>
+                  Load cube
+                </button>
+              </form>
               <label
                 className={clsx(
                   'flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-line-3 bg-panel px-6 py-8 text-center hover:border-dim',
@@ -160,7 +209,7 @@ export function ImportListDialog({ onClose }: { onClose: () => void }) {
                 }}
               />
               <div className="flex items-center justify-end gap-3">
-                {busy && <span className="text-xs text-muted">Looking up cards on Scryfall…</span>}
+                {busy && <span className="text-xs text-muted">Looking up cards…</span>}
                 <button type="button" className="btn btn-primary" disabled={busy || !text.trim()} onClick={() => void runPreview(text, filename)}>
                   Preview
                 </button>

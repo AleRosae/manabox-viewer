@@ -1,18 +1,26 @@
+import json
 import re
 import sqlite3
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field
+from typing import Annotated
 
-from .. import db
+from pydantic import BaseModel, Field, StringConstraints
+
+from .. import cubecobra, db
 from ..cards import ensure_card, get_slims, now_iso, oracle_id_of, slim
+from ..cubecobra import CubeCobraError, in_cube_count, parse_cube_ref, resolve_cube, sort_statuses
 from ..exporters import cubecobra_csv, missing_text, plain_text, viewer_list
-from ..list_import import merge_by_oracle, parse_list_text, resolve_lines
+from ..list_import import merge_by_oracle, normalize_tags, parse_list_text, resolve_lines
 from ..scryfall import ScryfallError, get_client
 
 router = APIRouter(prefix="/api/lists", tags=["lists"])
+
+
+# Longer tags are cut to MAX_TAG_LEN by normalize_tags; this only bounds the request size.
+Tag = Annotated[str, StringConstraints(max_length=200)]
 
 
 class ListIn(BaseModel):
@@ -25,6 +33,7 @@ class ListPatch(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=120)
     description: str | None = None
     kind: str | None = Field(None, pattern="^(cube|generic)$")
+    cubecobra_id: str | None = Field(None, max_length=300)  # a cube URL or id; "" unlinks
 
 
 class BulkItem(BaseModel):
@@ -44,18 +53,31 @@ class ImportItem(BaseModel):
     scryfall_id: str
     quantity: int = Field(ge=1, le=999)
     their_owned: int | None = Field(None, ge=0)
+    tags: list[Tag] = Field([], max_length=100)
+    cube_statuses: list[str] | None = Field(None, max_length=999)
 
 
 class ImportIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     kind: str = Field("generic", pattern="^(cube|generic)$")
     shared_by: str | None = Field(None, max_length=60)
+    cubecobra_id: str | None = Field(None, max_length=300)
     items: list[ImportItem] = Field(min_length=1)
+
+
+class CubePreviewIn(BaseModel):
+    url: str = Field(min_length=1, max_length=300)
+
+
+class SyncIn(BaseModel):
+    cube: str | None = Field(None, max_length=300)  # link to this cube instead of the stored one
+    apply: bool = False
 
 
 class ItemPatch(BaseModel):
     quantity: int | None = Field(None, ge=1, le=999)
     preferred_scryfall_id: str | None = None
+    tags: list[Tag] | None = Field(None, max_length=100)
 
 
 def owned_by_oracle(conn: sqlite3.Connection) -> dict[str, int]:
@@ -85,6 +107,25 @@ def _get_list(conn: sqlite3.Connection, list_id: int):
     return row
 
 
+def _cube_id(text: str) -> str:
+    cube_id = parse_cube_ref(text)
+    if cube_id is None:
+        raise HTTPException(422, "Not a CubeCobra cube URL or id")
+    return cube_id
+
+
+def _fetch_cube(conn: sqlite3.Connection, cube_id: str) -> tuple[dict, list[dict], list[str]]:
+    try:
+        cube = cubecobra.get_client().fetch_cube(cube_id)
+    except CubeCobraError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    try:
+        entries, unresolved = resolve_cube(conn, get_client(), cube)
+    except ScryfallError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return cube, entries, unresolved
+
+
 def _touch(conn: sqlite3.Connection, list_id: int) -> None:
     conn.execute("UPDATE lists SET updated_at = ? WHERE id = ?", (now_iso(), list_id))
 
@@ -108,6 +149,7 @@ def _items(conn: sqlite3.Connection, list_id: int) -> list[dict]:
         if card is None:
             continue
         own = owned.get(r["oracle_id"], 0)
+        statuses = json.loads(r["cube_statuses"]) if r["cube_statuses"] else None
         elsewhere = sum(q for lid, q in usage.get(r["oracle_id"], {}).items() if lid != list_id)
         out.append({
             "id": r["id"],
@@ -119,6 +161,10 @@ def _items(conn: sqlite3.Connection, list_id: int) -> list[dict]:
             "used_elsewhere": elsewhere,
             "ownership": _ownership(own, r["quantity"]),
             "their_owned": r["their_owned"],
+            "tags": json.loads(r["tags"]),
+            "cube_statuses": statuses,
+            # copies CubeCobra marks as in the cube (owned, proxied...); None when unknown
+            "cube_owned": in_cube_count(statuses),
             "card": card,
         })
     return out
@@ -169,6 +215,7 @@ def import_preview(body: ImportPreviewIn, conn: sqlite3.Connection = Depends(db.
             "owned": own,
             "ownership": _ownership(own, entry["quantity"]),
             "their_owned": entry["their_owned"],
+            "tags": entry["tags"],
             "card": slim(entry["card"]),
         })
     items.sort(key=lambda i: i["card"]["name"])
@@ -184,15 +231,45 @@ def import_preview(body: ImportPreviewIn, conn: sqlite3.Connection = Depends(db.
     }
 
 
+@router.post("/cubecobra/preview")
+def cubecobra_preview(body: CubePreviewIn, conn: sqlite3.Connection = Depends(db.get_conn)):
+    """Fetch a CubeCobra cube and compare it with the collection, without saving anything."""
+    cube, entries, unresolved = _fetch_cube(conn, _cube_id(body.url))
+    owned = owned_by_oracle(conn)
+    items = []
+    for entry in entries:
+        own = owned.get(entry["oracle_id"], 0)
+        items.append({
+            "oracle_id": entry["oracle_id"],
+            "scryfall_id": entry["card"]["id"],
+            "quantity": entry["quantity"],
+            "owned": own,
+            "ownership": _ownership(own, entry["quantity"]),
+            "their_owned": None,
+            "tags": entry["tags"],
+            "cube_statuses": entry["statuses"],
+            "card": slim(entry["card"]),
+        })
+    items.sort(key=lambda i: i["card"]["name"])
+    return {
+        "meta": {"name": cube["name"], "kind": "cube", "has_ownership": False, "cubecobra_id": cube["id"]},
+        "items": items,
+        "unresolved": unresolved,
+    }
+
+
 @router.post("/import", status_code=201)
 def import_list(body: ImportIn, conn: sqlite3.Connection = Depends(db.get_conn)):
     ts = now_iso()
     shared_by = (body.shared_by or "").strip() or None
+    cube_id = _cube_id(body.cubecobra_id) if body.cubecobra_id else None
     list_id = conn.execute(
-        "INSERT INTO lists (name, description, kind, shared_by, created_at, updated_at) VALUES (?, '', ?, ?, ?, ?)",
-        (body.name.strip(), body.kind, shared_by, ts, ts),
+        """INSERT INTO lists (name, description, kind, shared_by, cubecobra_id, synced_at, created_at, updated_at)
+           VALUES (?, '', ?, ?, ?, ?, ?, ?)""",
+        (body.name.strip(), body.kind, shared_by, cube_id, ts if cube_id else None, ts, ts),
     ).lastrowid
     client = get_client()
+    merged: dict[str, dict] = {}
     for item in body.items:
         try:
             card = ensure_card(conn, client, item.scryfall_id)
@@ -201,15 +278,24 @@ def import_list(body: ImportIn, conn: sqlite3.Connection = Depends(db.get_conn))
         if card is None:
             raise HTTPException(404, f"Card {item.scryfall_id} not found")
         their = min(item.their_owned, item.quantity) if item.their_owned is not None else None
-        conn.execute(
-            """INSERT INTO list_items (list_id, oracle_id, preferred_scryfall_id, quantity, their_owned, added_at)
-               VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT (list_id, oracle_id) DO UPDATE SET
-                 quantity = quantity + excluded.quantity,
-                 their_owned = CASE WHEN their_owned IS NULL AND excluded.their_owned IS NULL THEN NULL
-                                    ELSE COALESCE(their_owned, 0) + COALESCE(excluded.their_owned, 0) END""",
-            (list_id, oracle_id_of(card), card["id"], item.quantity, their, ts),
+        entry = merged.setdefault(
+            oracle_id_of(card), {"scryfall_id": card["id"], "quantity": 0, "their_owned": None, "tags": [], "statuses": None}
         )
+        if item.cube_statuses is not None:
+            entry["statuses"] = sort_statuses((entry["statuses"] or []) + item.cube_statuses)
+        entry["quantity"] += item.quantity
+        if their is not None:
+            entry["their_owned"] = (entry["their_owned"] or 0) + their
+        entry["tags"] = normalize_tags(entry["tags"] + item.tags)
+    conn.executemany(
+        """INSERT INTO list_items (list_id, oracle_id, preferred_scryfall_id, quantity, their_owned, tags, cube_statuses, added_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        [
+            (list_id, oid, e["scryfall_id"], e["quantity"], e["their_owned"], json.dumps(e["tags"]),
+             json.dumps(e["statuses"]) if e["statuses"] is not None else None, ts)
+            for oid, e in merged.items()
+        ],
+    )
     return dict(_get_list(conn, list_id))
 
 
@@ -220,8 +306,15 @@ def get_list(list_id: int, conn: sqlite3.Connection = Depends(db.get_conn)):
 
 @router.patch("/{list_id}")
 def update_list(list_id: int, body: ListPatch, conn: sqlite3.Connection = Depends(db.get_conn)):
-    _get_list(conn, list_id)
-    for field, value in body.model_dump(exclude_none=True).items():
+    lst = _get_list(conn, list_id)
+    changes = body.model_dump(exclude_none=True)
+    if "cubecobra_id" in changes:
+        changes["cubecobra_id"] = _cube_id(changes["cubecobra_id"]) if changes["cubecobra_id"].strip() else None
+        if changes["cubecobra_id"] == lst["cubecobra_id"]:
+            del changes["cubecobra_id"]
+        else:
+            changes["synced_at"] = None
+    for field, value in changes.items():
         conn.execute(f"UPDATE lists SET {field} = ? WHERE id = ?", (value, list_id))
     _touch(conn, list_id)
     return dict(_get_list(conn, list_id))
@@ -285,6 +378,8 @@ def update_item(list_id: int, item_id: int, body: ItemPatch, conn: sqlite3.Conne
         if card is None or oracle_id_of(card) != item["oracle_id"]:
             raise HTTPException(422, "The chosen printing is not the same card")
         conn.execute("UPDATE list_items SET preferred_scryfall_id = ? WHERE id = ?", (card["id"], item_id))
+    if body.tags is not None:
+        conn.execute("UPDATE list_items SET tags = ? WHERE id = ?", (json.dumps(normalize_tags(body.tags)), item_id))
     _touch(conn, list_id)
     return {"ok": True}
 
@@ -293,6 +388,102 @@ def update_item(list_id: int, item_id: int, body: ItemPatch, conn: sqlite3.Conne
 def delete_item(list_id: int, item_id: int, conn: sqlite3.Connection = Depends(db.get_conn)):
     conn.execute("DELETE FROM list_items WHERE id = ? AND list_id = ?", (item_id, list_id))
     _touch(conn, list_id)
+
+
+@router.post("/{list_id}/sync")
+def sync_list(list_id: int, body: SyncIn, conn: sqlite3.Connection = Depends(db.get_conn)):
+    """Diff the list against its CubeCobra cube; with apply, make the cards match it.
+
+    CubeCobra decides which cards, how many copies and their statuses; tags are merged (local
+    ones are kept) and the printing chosen locally is preserved.
+    """
+    lst = _get_list(conn, list_id)
+    cube_id = _cube_id(body.cube) if body.cube else lst["cubecobra_id"]
+    if not cube_id:
+        raise HTTPException(422, "The list is not linked to a CubeCobra cube")
+    cube, entries, unresolved = _fetch_cube(conn, cube_id)
+    if not entries:
+        # Never let an empty (or unreadable) cube wipe the list.
+        raise HTTPException(502, f"No recognisable cards in the cube “{cube['name']}”")
+
+    current = {r["oracle_id"]: dict(r) for r in conn.execute("SELECT * FROM list_items WHERE list_id = ?", (list_id,))}
+    incoming = {e["oracle_id"]: e for e in entries}
+    names = {sid: c["name"] for sid, c in get_slims(conn, (r["preferred_scryfall_id"] for r in current.values())).items()}
+    owned = owned_by_oracle(conn)
+
+    added = [e for oid, e in incoming.items() if oid not in current]
+    removed = [r for oid, r in current.items() if oid not in incoming]
+    changed, retagged, restatused = [], [], []
+    for oid, e in incoming.items():
+        if oid not in current:
+            continue
+        row = current[oid]
+        if row["quantity"] != e["quantity"]:
+            changed.append((row, e))
+        local = json.loads(row["tags"])
+        merged = normalize_tags(local + e["tags"])
+        if len(merged) > len(local):
+            retagged.append((row, merged, merged[len(local):]))
+        before = json.loads(row["cube_statuses"]) if row["cube_statuses"] else None
+        if before != e["statuses"]:
+            restatused.append((row, before, e["statuses"]))
+
+    if body.apply:
+        ts = now_iso()
+        conn.executemany(
+            # ON CONFLICT: a concurrent sync may have added the card in the meantime.
+            """INSERT INTO list_items (list_id, oracle_id, preferred_scryfall_id, quantity, tags, cube_statuses, added_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (list_id, oracle_id) DO UPDATE SET quantity = excluded.quantity""",
+            [
+                (list_id, e["oracle_id"], e["card"]["id"], e["quantity"], json.dumps(e["tags"]), json.dumps(e["statuses"]), ts)
+                for e in added
+            ],
+        )
+        conn.executemany("DELETE FROM list_items WHERE id = ?", [(r["id"],) for r in removed])
+        conn.executemany("UPDATE list_items SET quantity = ? WHERE id = ?", [(e["quantity"], r["id"]) for r, e in changed])
+        conn.executemany("UPDATE list_items SET tags = ? WHERE id = ?", [(json.dumps(t), r["id"]) for r, t, _ in retagged])
+        conn.executemany(
+            "UPDATE list_items SET cube_statuses = ? WHERE id = ?", [(json.dumps(new), r["id"]) for r, _, new in restatused]
+        )
+        conn.execute(
+            "UPDATE lists SET cubecobra_id = ?, synced_at = ?, updated_at = ? WHERE id = ?",
+            (cube["id"], ts, ts, list_id),
+        )
+
+    def name_of(row: dict) -> str:
+        return names.get(row["preferred_scryfall_id"], "?")
+
+    # oracle_id identifies each line: names can repeat (Un-cards, missing card data).
+
+    return {
+        "cube": {"id": cube["id"], "name": cube["name"], "url": cubecobra.cube_url(cube["id"])},
+        "applied": body.apply,
+        "added": sorted(
+            ({"oracle_id": e["oracle_id"], "name": e["card"]["name"], "quantity": e["quantity"],
+              "owned": owned.get(e["oracle_id"], 0)} for e in added),
+            key=lambda x: x["name"],
+        ),
+        "removed": sorted(
+            ({"oracle_id": r["oracle_id"], "name": name_of(r), "quantity": r["quantity"]} for r in removed),
+            key=lambda x: x["name"],
+        ),
+        "changed": sorted(
+            ({"oracle_id": r["oracle_id"], "name": name_of(r), "from": r["quantity"], "to": e["quantity"]} for r, e in changed),
+            key=lambda x: x["name"],
+        ),
+        "retagged": sorted(
+            ({"oracle_id": r["oracle_id"], "name": name_of(r), "tags": new} for r, _, new in retagged), key=lambda x: x["name"]
+        ),
+        # CubeCobra's owned/proxied/... marks changed (or are new for this list): "from" is None when unknown
+        "restatused": sorted(
+            ({"oracle_id": r["oracle_id"], "name": name_of(r), "from": in_cube_count(old), "to": in_cube_count(new),
+              "quantity": len(new)} for r, old, new in restatused),
+            key=lambda x: x["name"],
+        ),
+        "unresolved": unresolved,
+        "list_size": len(current),
+    }
 
 
 @router.get("/{list_id}/export")

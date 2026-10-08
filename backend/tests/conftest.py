@@ -5,7 +5,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, db, scryfall
+from app import config, cubecobra, db, scryfall
+from app.cubecobra import CubeCobraClient
 from app.scryfall import ScryfallClient
 
 
@@ -101,3 +102,34 @@ def api(fake_scryfall, monkeypatch):
     from app.main import app
     with TestClient(app) as client:
         yield client
+
+
+class FakeCubeCobra:
+    """Public cubes by id, in the shape of /cube/api/cubeJSON/<id>."""
+
+    def __init__(self):
+        self.cubes: dict[str, dict] = {}
+
+    def add(self, cube_id: str, name: str, cards: list[tuple]) -> None:
+        """cards: (scryfall id, tags[, status]) per copy; the status defaults to Owned."""
+        self.cubes[cube_id] = {
+            "shortId": cube_id,
+            "name": name,
+            "cards": {"mainboard": [{"cardID": c[0], "tags": c[1], "status": c[2] if len(c) > 2 else "Owned",
+                                     "details": {"name": c[0]}} for c in cards],
+                      "maybeboard": []},
+        }
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        cube_id = request.url.path.rsplit("/", 1)[1]
+        cube = self.cubes.get(cube_id)
+        return httpx.Response(200, json=cube) if cube else httpx.Response(404, text="Not found")
+
+
+@pytest.fixture
+def fake_cubecobra():
+    fake = FakeCubeCobra()
+    http = httpx.Client(base_url="https://cubecobra.test", transport=httpx.MockTransport(fake.handler))
+    cubecobra.set_client(CubeCobraClient(http=http))
+    yield fake
+    cubecobra.set_client(None)

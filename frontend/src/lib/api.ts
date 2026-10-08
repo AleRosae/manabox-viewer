@@ -1,4 +1,4 @@
-import type { Card, CollectionData, ImportDiff, ImportInfo, ListDetail, ListImportPreview, ListKind, ListSummary, Status, Usage } from './types'
+import type { Card, CollectionData, CubeSync, ImportDiff, ImportInfo, ListDetail, ListImportPreview, ListKind, ListSummary, Status, Usage } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -53,12 +53,13 @@ export const api = {
   usage: () => request<Usage>('/api/lists/usage'),
   list: (id: number) => request<ListDetail>(`/api/lists/${id}`),
   createList: (name: string, kind: ListKind) => request<ListSummary>('/api/lists', json('POST', { name, kind })),
-  updateList: (id: number, patch: Partial<Pick<ListSummary, 'name' | 'description' | 'kind'>>) =>
+  /** `cubecobra_id`: a cube URL or id, '' to unlink */
+  updateList: (id: number, patch: Partial<Pick<ListSummary, 'name' | 'description' | 'kind'> & { cubecobra_id: string }>) =>
     request<ListSummary>(`/api/lists/${id}`, json('PATCH', patch)),
   deleteList: (id: number) => request<void>(`/api/lists/${id}`, { method: 'DELETE' }),
   bulkItems: (id: number, items: { scryfall_id: string; quantity: number }[]) =>
     request<{ applied: BulkApplied[] }>(`/api/lists/${id}/items/bulk`, json('POST', { items })),
-  updateItem: (listId: number, itemId: number, patch: { quantity?: number; preferred_scryfall_id?: string }) =>
+  updateItem: (listId: number, itemId: number, patch: { quantity?: number; preferred_scryfall_id?: string; tags?: string[] }) =>
     request<unknown>(`/api/lists/${listId}/items/${itemId}`, json('PATCH', patch)),
   deleteItem: (listId: number, itemId: number) =>
     request<void>(`/api/lists/${listId}/items/${itemId}`, { method: 'DELETE' }),
@@ -68,8 +69,13 @@ export const api = {
     name: string
     kind: ListKind
     shared_by: string | null
-    items: { scryfall_id: string; quantity: number; their_owned: number | null }[]
+    cubecobra_id?: string | null
+    items: { scryfall_id: string; quantity: number; their_owned: number | null; tags: string[]; cube_statuses?: string[] }[]
   }) => request<ListSummary>('/api/lists/import', json('POST', body)),
+  previewCube: (url: string) => request<ListImportPreview>('/api/lists/cubecobra/preview', json('POST', { url })),
+  /** `cube` links the list to another cube (saved only with `apply`) */
+  syncCube: (id: number, body: { cube?: string; apply?: boolean }) =>
+    request<CubeSync>(`/api/lists/${id}/sync`, json('POST', body)),
 
   autocomplete: (q: string) => request<string[]>(`/api/scryfall/autocomplete?q=${encodeURIComponent(q)}`),
   named: (name: string) => request<Card>(`/api/scryfall/named?name=${encodeURIComponent(name)}`),
