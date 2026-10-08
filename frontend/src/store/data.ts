@@ -53,7 +53,7 @@ export function useCollectionIndex() {
   )
 }
 
-const LAST_LIST_KEY = 'mbc:lastList'
+const LAST_LIST_KEY = 'mbv:lastList'
 
 export function getLastListId(): number | null {
   try {

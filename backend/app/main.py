@@ -20,7 +20,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="ManaBox Cuber", lifespan=lifespan)
+app = FastAPI(title="ManaBox Viewer", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=2048)
 
 

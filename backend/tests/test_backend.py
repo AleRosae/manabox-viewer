@@ -5,6 +5,7 @@ import pytest
 
 from app.csv_import import CsvFormatError, parse_manabox_csv
 from app.importer import compute_diff
+from app.list_import import parse_list_text
 from conftest import fake_card
 
 HEADER = [
@@ -49,7 +50,7 @@ def test_parse_csv_normalises_values():
 
 
 def test_parse_csv_rejects_other_formats():
-    with pytest.raises(CsvFormatError, match="colonne mancanti"):
+    with pytest.raises(CsvFormatError, match="missing columns"):
         parse_manabox_csv(b"foo,bar\n1,2\n")
 
 
@@ -171,3 +172,94 @@ def test_lists_bulk_ownership_and_export(api, fake_scryfall):
     assert txt == "4 Opt (TST) 1\n"
 
     assert api.get("/api/lists/usage").json()[items["Opt"]["oracle_id"]] == {str(cube["id"]): 4, str(other["id"]): 1}
+
+
+# --- list sharing ----------------------------------------------------------------------------
+
+def test_parse_list_text_variants():
+    meta, lines, invalid = parse_list_text(
+        "﻿# ManaBox Viewer list v1\n# name: Pauper Cube\n# kind: cube\n\n"
+        "2 Lightning Bolt (2X2) 117 | owned 1\n1x Counterspell\nOpt\nSideboard\n"
+        "Fire // Ice (MH2) 290 *F*\n"
+    )
+    assert meta == {"name": "Pauper Cube", "kind": "cube"}
+    assert invalid == []
+    assert [(l.quantity, l.name, l.set_code, l.collector_number, l.owned) for l in lines] == [
+        (2, "Lightning Bolt", "2x2", "117", 1),
+        (1, "Counterspell", None, None, None),
+        (1, "Opt", None, None, None),
+        (1, "Fire // Ice", "mh2", "290", None),
+    ]
+
+
+def _share_setup(api, fake_scryfall):
+    fake_scryfall.add(fake_card(ID_A, "Opt"))
+    fake_scryfall.add(fake_card(ID_B, "Counterspell", number="2"))
+    fake_scryfall.add(fake_card(ID_C, "Black Lotus", number="232"))
+    upload(api, [row("Opt", ID_A, qty=3), row("Counterspell", ID_B, qty=1, number="2")])
+
+
+def test_list_import_preview_resolves_and_compares(api, fake_scryfall):
+    _share_setup(api, fake_scryfall)
+    text = (
+        "# name: Friend cube\n# kind: cube\n"
+        "2 Opt (TST) 1 | owned 2\n"
+        "2 Counterspell (XXX) 9 | owned 0\n"   # wrong print: resolved by name
+        "1 Black Lotus | owned 1\n"
+        "1 Opt | owned 0\n"                     # duplicate: merged
+        "1 Lotus Blac | owned 0\n"              # unknown even fuzzily
+    )
+    body = api.post("/api/lists/import/preview", json={"text": text}).json()
+    assert body["meta"] == {"name": "Friend cube", "kind": "cube", "has_ownership": True}
+    items = {i["card"]["name"]: i for i in body["items"]}
+    assert (items["Opt"]["quantity"], items["Opt"]["owned"], items["Opt"]["their_owned"]) == (3, 3, 2)
+    assert items["Counterspell"]["ownership"] == "partial"
+    assert items["Black Lotus"]["ownership"] == "not_owned" and items["Black Lotus"]["their_owned"] == 1
+    assert body["unresolved"] == ["1 Lotus Blac | owned 0"]
+
+
+def test_list_import_and_viewer_round_trip(api, fake_scryfall):
+    _share_setup(api, fake_scryfall)
+    created = api.post("/api/lists/import", json={
+        "name": "Friend cube", "kind": "cube", "shared_by": "Marco",
+        "items": [{"scryfall_id": ID_A, "quantity": 2, "their_owned": 5},
+                  {"scryfall_id": ID_C, "quantity": 1, "their_owned": 1}],
+    }).json()
+    assert created["shared_by"] == "Marco"
+    detail = api.get(f"/api/lists/{created['id']}").json()
+    assert {i["card"]["name"]: i["their_owned"] for i in detail["items"]} == {"Opt": 2, "Black Lotus": 1}
+
+    exported = api.get(f"/api/lists/{created['id']}/export?format=viewer").text
+    assert exported.startswith("# ManaBox Viewer list v1\n# name: Friend cube\n# kind: cube\n")
+    # The export carries *my* ownership: 3 Opt owned (capped to 2), no Black Lotus.
+    assert "2 Opt (TST) 1 | owned 2" in exported and "1 Black Lotus (TST) 232 | owned 0" in exported
+    back = api.post("/api/lists/import/preview", json={"text": exported}).json()
+    assert {i["card"]["name"]: (i["quantity"], i["their_owned"]) for i in back["items"]} == {
+        "Opt": (2, 2), "Black Lotus": (1, 0)}
+
+    missing = api.get(f"/api/lists/{created['id']}/export?format=missing").text
+    assert missing == "1 Black Lotus (TST) 232\n"
+
+
+def test_legacy_db_is_renamed_and_migrated(tmp_path, monkeypatch):
+    import sqlite3
+
+    from app import config, db
+    legacy = tmp_path / config.LEGACY_DB_NAME
+    conn = sqlite3.connect(legacy)
+    conn.executescript(
+        "CREATE TABLE lists (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',"
+        " kind TEXT NOT NULL DEFAULT 'generic', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);"
+        "INSERT INTO lists VALUES (1, 'Old', '', 'cube', 'x', 'x');"
+        "CREATE TABLE list_items (id INTEGER PRIMARY KEY, list_id INTEGER NOT NULL, oracle_id TEXT NOT NULL,"
+        " preferred_scryfall_id TEXT NOT NULL, quantity INTEGER NOT NULL, added_at TEXT NOT NULL);"
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "manabox_viewer.sqlite3")
+    db.init_db()
+    assert not legacy.exists()
+    with db.session() as conn:
+        assert conn.execute("SELECT name, shared_by FROM lists").fetchone()[:] == ("Old", None)
+        assert "their_owned" in {r["name"] for r in conn.execute("PRAGMA table_info(list_items)")}

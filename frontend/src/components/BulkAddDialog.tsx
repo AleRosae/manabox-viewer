@@ -17,7 +17,7 @@ interface Props {
 export function BulkAddDialog({ listId, entries, onClose }: Props) {
   const index = useCollectionIndex()
   const usage = useData((s) => s.usage)
-  const listName = useData((s) => s.lists.find((l) => l.id === listId)?.name ?? 'lista')
+  const listName = useData((s) => s.lists.find((l) => l.id === listId)?.name ?? 'list')
   const [busy, setBusy] = useState(false)
 
   // Several entries can share a card (binder scope, different printings): merge them by oracle id.
@@ -63,23 +63,23 @@ export function BulkAddDialog({ listId, entries, onClose }: Props) {
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[520px] max-w-[calc(100vw-24px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-[14px] border border-[#3A3F4B] bg-raised p-5 shadow-[0_24px_60px_rgba(0,0,0,.65)]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <Dialog.Title className="m-0 text-base font-semibold">Aggiungi a {listName}</Dialog.Title>
+              <Dialog.Title className="m-0 text-base font-semibold">Add to {listName}</Dialog.Title>
               <Dialog.Description className="m-0 mt-0.5 text-xs text-dim">
-                {cards.length} carte · scegli quante copie aggiungere per ognuna
+                {cards.length} card{cards.length === 1 ? '' : 's'} · choose how many copies to add for each
               </Dialog.Description>
             </div>
-            <Dialog.Close className="btn btn-ghost btn-icon -mr-2 -mt-2" aria-label="Chiudi">
+            <Dialog.Close className="btn btn-ghost btn-icon -mr-2 -mt-2" aria-label="Close">
               <X size={16} />
             </Dialog.Close>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted">
-            Imposta tutte:
+            Set all:
             <button type="button" className="min-h-8 rounded-full border border-line-3 px-2.5 hover:border-accent hover:text-fg" onClick={() => preset('one')}>
-              1 per carta
+              1 per card
             </button>
             <button type="button" className="min-h-8 rounded-full border border-line-3 px-2.5 hover:border-accent hover:text-fg" onClick={() => preset('all')}>
-              Tutte le disponibili
+              All available
             </button>
           </div>
 
@@ -92,9 +92,9 @@ export function BulkAddDialog({ listId, entries, onClose }: Props) {
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-sm">{c.entry.card.name}</span>
                     <span className="text-[11.5px] text-dim">
-                      {c.owned} possedut{c.owned === 1 ? 'a' : 'e'}
-                      {c.inThis > 0 && ` · già ${c.inThis} in questa lista`}
-                      {c.elsewhere > 0 && ` · ${c.elsewhere} in altre liste`}
+                      {c.owned} owned
+                      {c.inThis > 0 && ` · ${c.inThis} already in this list`}
+                      {c.elsewhere > 0 && ` · ${c.elsewhere} in other lists`}
                     </span>
                   </div>
                   <QtyStepper size="sm" value={value} of={c.available} onChange={(v) => setQty((q) => ({ ...q, [id]: v }))} />
@@ -104,9 +104,9 @@ export function BulkAddDialog({ listId, entries, onClose }: Props) {
           </ul>
 
           <div className="flex justify-end gap-2 pt-1">
-            <Dialog.Close className="btn">Indietro</Dialog.Close>
+            <Dialog.Close className="btn">Back</Dialog.Close>
             <button type="button" className="btn btn-primary" disabled={busy || total === 0} onClick={() => void submit()}>
-              Aggiungi {total} {total === 1 ? 'copia' : 'copie'}
+              Add {total} {total === 1 ? 'copy' : 'copies'}
             </button>
           </div>
         </Dialog.Content>

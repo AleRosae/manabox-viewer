@@ -32,7 +32,7 @@ def image(
     conn: sqlite3.Connection = Depends(db.get_conn),
 ):
     if not _ID_RE.match(scryfall_id):
-        raise HTTPException(400, "ID non valido")
+        raise HTTPException(400, "Invalid ID")
     path = config.IMAGES_DIR / size / f"{scryfall_id}_{face}.jpg"
     if path.exists():
         return FileResponse(path, media_type="image/jpeg", headers=CACHE_HEADERS)
@@ -42,17 +42,17 @@ def image(
     except ScryfallError as exc:
         raise HTTPException(502, str(exc)) from exc
     if card is None:
-        raise HTTPException(404, "Carta non trovata")
+        raise HTTPException(404, "Card not found")
     url = _image_url(card, size, face)
     if not url:
-        raise HTTPException(404, "Immagine non disponibile")
+        raise HTTPException(404, "Image not available")
 
     with _download_sem:
         if not path.exists():
             try:
                 content = get_client().download(url)
             except Exception as exc:  # noqa: BLE001
-                raise HTTPException(502, f"Download immagine fallito: {exc}") from exc
+                raise HTTPException(502, f"Image download failed: {exc}") from exc
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(f".{threading.get_ident()}.tmp")
             tmp.write_bytes(content)

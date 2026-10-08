@@ -17,7 +17,7 @@ export function StatsPage() {
 
   const stats = useMemo(() => {
     if (!collection) return null
-    // Always aggregate per card so "carte uniche" and the top list are per card, not per row.
+    // Always aggregate per card so "unique cards" and the top list are per card, not per row.
     const scopedRows = scope === 'all' ? collection.rows : collection.rows.filter((r) => r.binder_name === scope)
     const entries = buildEntries(scopedRows, collection.cards, 'all', rate)
     return computeStats(
@@ -42,7 +42,7 @@ export function StatsPage() {
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-[22px] px-4 pb-14 pt-[26px] sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3.5">
-        <h1 className="m-0 text-[26px] font-bold tracking-[-0.02em]">Statistiche collezione</h1>
+        <h1 className="m-0 text-[26px] font-bold tracking-[-0.02em]">Collection stats</h1>
       </div>
       <ScopeTabs scope={scope} onChange={(s) => setParams(s === 'all' ? {} : { scope: s }, { replace: true })} />
       <StatsView stats={stats} showBinders={scope === 'all'} onCardClick={open} />

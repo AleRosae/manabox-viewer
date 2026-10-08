@@ -21,7 +21,7 @@ function Logo() {
           <path d="M9 21h8a2 2 0 0 0 2-2V7" />
         </svg>
       </span>
-      <span className="text-base font-bold tracking-[-0.01em]">ManaBox Cuber</span>
+      <span className="text-base font-bold tracking-[-0.01em]">ManaBox Viewer</span>
     </Link>
   )
 }
@@ -37,24 +37,24 @@ function Header() {
       {current && (
         <nav className="flex flex-wrap gap-0.5">
           <NavLink to="/" end className={nav}>
-            Collezione
+            Collection
           </NavLink>
           <NavLink to="/stats" className={nav}>
             Stats
           </NavLink>
           <NavLink to="/lists" className={nav}>
-            Liste
+            Lists
           </NavLink>
         </nav>
       )}
       <span className="flex-1" />
       {current && (
         <span className="hidden text-xs text-dim md:inline">
-          Export del {fmtDate(current.imported_at)} · prezzi del {fmtDate(status?.prices.updated_at ?? current.imported_at)}
+          Export {fmtDate(current.imported_at)} · prices {fmtDate(status?.prices.updated_at ?? current.imported_at)}
         </span>
       )}
       <Link to="/import" className="btn">
-        <Upload size={15} /> Importa export
+        <Upload size={15} /> Import export
       </Link>
     </header>
   )
@@ -113,11 +113,11 @@ export default function App() {
       <div className="flex min-h-screen flex-col">
         <Header />
         {error ? (
-          <div className="m-8 rounded-xl border border-bad/40 bg-panel p-6 text-sm">Il backend non risponde: {error}</div>
+          <div className="m-8 rounded-xl border border-bad/40 bg-panel p-6 text-sm">Backend not responding: {error}</div>
         ) : ready ? (
           <AppRoutes />
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted">Carico la collezione…</div>
+          <div className="flex flex-1 items-center justify-center text-sm text-muted">Loading collection…</div>
         )}
       </div>
       <RouteEffects />

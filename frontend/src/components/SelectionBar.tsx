@@ -37,22 +37,22 @@ export function SelectionBar({ visible }: Props) {
     <>
       <div className="sticky bottom-5 z-30 mt-4 flex flex-wrap items-center gap-3 rounded-[14px] border border-[#3A3F4B] bg-raised py-2.5 pl-[18px] pr-3 shadow-[0_20px_50px_rgba(0,0,0,.6)]">
         <span className="text-sm">
-          <span className="font-mono font-semibold text-accent">{chosen.length}</span> selezionat{chosen.length === 1 ? 'a' : 'e'}
+          <span className="font-mono font-semibold text-accent">{chosen.length}</span> selected
         </span>
         <button
           type="button"
           className="min-h-10 text-[13px] font-medium underline underline-offset-[3px] hover:text-accent"
           onClick={() => (allSelected ? useSelection.getState().clear() : selectAll(visible.map((e) => e.key)))}
         >
-          {allSelected ? 'Deseleziona tutte' : `Seleziona tutte le ${visible.length} filtrate`}
+          {allSelected ? 'Deselect all' : `Select all ${visible.length} filtered`}
         </button>
         <span className="flex-1" />
-        <span className="text-[13px] text-muted">Aggiungi a</span>
+        <span className="text-[13px] text-muted">Add to</span>
         <ListPicker className="w-56" value={listId} onChange={setListId} newName={newName} onNewName={setNewName} />
         <button type="button" className="btn btn-primary" disabled={chosen.length === 0 || (listId === 'new' && !newName.trim())} onClick={() => void openReview()}>
-          Aggiungi…
+          Add…
         </button>
-        <button type="button" className="btn btn-ghost btn-icon" aria-label="Annulla selezione" onClick={() => setMode(false)}>
+        <button type="button" className="btn btn-ghost btn-icon" aria-label="Cancel selection" onClick={() => setMode(false)}>
           <X size={16} />
         </button>
       </div>

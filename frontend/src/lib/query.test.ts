@@ -137,8 +137,8 @@ describe('parseQuery / matches', () => {
   })
 
   it('reports unknown keys and unbalanced parentheses', () => {
-    expect(parseQuery('foo:bar').errors).toEqual(['Filtro sconosciuto: foo'])
-    expect(parseQuery('(t:instant').errors).toEqual(['Parentesi non chiusa'])
+    expect(parseQuery('foo:bar').errors).toEqual(['Unknown filter: foo'])
+    expect(parseQuery('(t:instant').errors).toEqual(['Unclosed parenthesis'])
   })
 
   it('empty query matches everything', () => {

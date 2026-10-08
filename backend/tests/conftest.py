@@ -54,6 +54,8 @@ class FakeScryfall:
             for ident in json.loads(request.content)["identifiers"]:
                 if "id" in ident:
                     card = self.cards.get(ident["id"])
+                elif "name" in ident:
+                    card = next((c for c in self.cards.values() if c["name"].lower() == ident["name"].lower()), None)
                 else:
                     card = next(
                         (c for c in self.cards.values()
@@ -63,8 +65,12 @@ class FakeScryfall:
                 (data.append(card) if card else missing.append(ident))
             return httpx.Response(200, json={"data": data, "not_found": missing})
         if path.startswith("/cards/named"):
-            name = request.url.params["exact"]
-            card = next((c for c in self.cards.values() if c["name"] == name), None)
+            if "exact" in request.url.params:
+                name = request.url.params["exact"]
+                card = next((c for c in self.cards.values() if c["name"] == name), None)
+            else:
+                fuzzy = request.url.params["fuzzy"].lower()
+                card = next((c for c in self.cards.values() if fuzzy in c["name"].lower()), None)
             return httpx.Response(200, json=card) if card else httpx.Response(404, json={})
         if path.startswith("/cards/"):
             card = self.cards.get(path.rsplit("/", 1)[1])

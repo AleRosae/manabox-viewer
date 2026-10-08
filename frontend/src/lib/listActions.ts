@@ -12,10 +12,10 @@ export interface AddItem {
 export async function addToList(listId: number, items: AddItem[]): Promise<void> {
   const wanted = items.filter((i) => i.quantity > 0)
   if (!wanted.length) {
-    toast.info('Nessuna copia da aggiungere')
+    toast.info('No copies to add')
     return
   }
-  const listName = useData.getState().lists.find((l) => l.id === listId)?.name ?? 'lista'
+  const listName = useData.getState().lists.find((l) => l.id === listId)?.name ?? 'list'
   try {
     const { applied } = await api.bulkItems(listId, wanted)
     setLastListId(listId)
@@ -23,23 +23,23 @@ export async function addToList(listId: number, items: AddItem[]): Promise<void>
     const copies = applied.reduce((n, a) => n + a.delta, 0)
     const label =
       applied.length === 1
-        ? `${applied[0].delta}× ${applied[0].name} aggiunt${applied[0].delta === 1 ? 'a' : 'e'} a ${listName}`
-        : `${copies} copie (${applied.length} carte) aggiunte a ${listName}`
+        ? `${applied[0].delta}× ${applied[0].name} added to ${listName}`
+        : `${copies} ${copies === 1 ? 'copy' : 'copies'} (${applied.length} cards) added to ${listName}`
     toast.success(label, {
       action: {
-        label: 'Annulla',
+        label: 'Undo',
         onClick: async () => {
           await api.bulkItems(
             listId,
             applied.map((a) => ({ scryfall_id: a.scryfall_id, quantity: -a.delta })),
           )
           await useData.getState().listsChanged()
-          toast('Aggiunta annullata')
+          toast('Add undone')
         },
       },
     })
   } catch (err) {
-    toast.error(`Impossibile aggiungere: ${(err as Error).message}`)
+    toast.error(`Could not add: ${(err as Error).message}`)
     throw err
   }
 }

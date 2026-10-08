@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS lists (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     kind TEXT NOT NULL DEFAULT 'generic',   -- cube | generic
+    shared_by TEXT,                         -- set when imported from someone else's list
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS list_items (
     oracle_id TEXT NOT NULL,
     preferred_scryfall_id TEXT NOT NULL,
     quantity INTEGER NOT NULL,
+    their_owned INTEGER,                    -- copies the sharer owned; NULL when unknown
     added_at TEXT NOT NULL,
     UNIQUE (list_id, oracle_id)
 );
@@ -108,12 +110,39 @@ def get_conn() -> Iterator[sqlite3.Connection]:
         yield conn
 
 
+# Columns added after the first release: (table, column, definition).
+ADDED_COLUMNS = [
+    ("lists", "shared_by", "TEXT"),
+    ("list_items", "their_owned", "INTEGER"),
+]
+
+
+def _rename_legacy_db() -> None:
+    current = config.DB_PATH
+    legacy = current.with_name(config.LEGACY_DB_NAME)
+    if current.exists() or not legacy.exists():
+        return
+    for suffix in ("", "-wal", "-shm"):
+        src = legacy.with_name(legacy.name + suffix)
+        if src.exists():
+            src.rename(current.with_name(current.name + suffix))
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    for table, column, definition in ADDED_COLUMNS:
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db() -> None:
+    _rename_legacy_db()
     with session() as conn:
         conn.executescript(SCHEMA)
+        _add_missing_columns(conn)
         # An import interrupted by a restart can never finish: mark it as failed.
         conn.execute(
-            "UPDATE imports SET status = 'error', error = 'Interrotto dal riavvio' WHERE status = 'enriching'"
+            "UPDATE imports SET status = 'error', error = 'Interrupted by a restart' WHERE status = 'enriching'"
         )
 
 

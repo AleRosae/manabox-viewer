@@ -32,10 +32,10 @@ def status(conn: sqlite3.Connection = Depends(db.get_conn)):
 async def upload(file: UploadFile, conn: sqlite3.Connection = Depends(db.get_conn)):
     running = conn.execute("SELECT id FROM imports WHERE status = 'enriching'").fetchone()
     if running:
-        raise HTTPException(409, "C'è già un import in corso")
+        raise HTTPException(409, "An import is already running")
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "File troppo grande")
+        raise HTTPException(413, "File too large")
     try:
         rows = parse_manabox_csv(content)
     except CsvFormatError as exc:
@@ -49,7 +49,7 @@ async def upload(file: UploadFile, conn: sqlite3.Connection = Depends(db.get_con
 def get_import(import_id: int, conn: sqlite3.Connection = Depends(db.get_conn)):
     row = conn.execute("SELECT * FROM imports WHERE id = ?", (import_id,)).fetchone()
     if not row:
-        raise HTTPException(404, "Import non trovato")
+        raise HTTPException(404, "Import not found")
     return dict(row)
 
 
@@ -64,5 +64,5 @@ def get_diff(import_id: int, conn: sqlite3.Connection = Depends(db.get_conn)):
 @router.post("/prices/refresh", status_code=202)
 def refresh_prices():
     if not importer.start_price_refresh():
-        raise HTTPException(409, "Aggiornamento prezzi già in corso")
+        raise HTTPException(409, "A price refresh is already running")
     return importer.price_job

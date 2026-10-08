@@ -36,5 +36,5 @@ def card(scryfall_id: str, conn: sqlite3.Connection = Depends(db.get_conn)):
     except ScryfallError as exc:
         raise HTTPException(502, str(exc)) from exc
     if data is None:
-        raise HTTPException(404, "Carta non trovata")
+        raise HTTPException(404, "Card not found")
     return slim(data)

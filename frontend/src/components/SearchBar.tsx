@@ -26,8 +26,8 @@ export function SearchBar({ value, onChange, errors, placeholder }: Props) {
         <Search size={18} className="shrink-0 text-muted" />
         <input
           className="min-w-0 flex-1 bg-transparent font-mono text-[15px] text-fg outline-none placeholder:font-sans placeholder:text-dim"
-          aria-label="Ricerca con sintassi Scryfall"
-          placeholder={placeholder ?? 'Cerca… es. t:creature c<=ug mv<=3 r>=rare'}
+          aria-label="Search with Scryfall syntax"
+          placeholder={placeholder ?? 'Search… e.g. t:creature c<=ug mv<=3 r>=rare'}
           value={draft}
           spellCheck={false}
           onChange={(e) => setDraft(e.target.value)}
@@ -37,7 +37,7 @@ export function SearchBar({ value, onChange, errors, placeholder }: Props) {
           }}
         />
         {draft && (
-          <button type="button" className="btn btn-ghost btn-icon min-h-8 w-8" aria-label="Svuota ricerca" onClick={() => onChange('')}>
+          <button type="button" className="btn btn-ghost btn-icon min-h-8 w-8" aria-label="Clear search" onClick={() => onChange('')}>
             <X size={16} />
           </button>
         )}
@@ -45,7 +45,7 @@ export function SearchBar({ value, onChange, errors, placeholder }: Props) {
           <Popover.Trigger asChild>
             <button type="button" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-dim hover:text-fg">
               <CircleHelp size={15} />
-              <span className="hidden sm:inline">Sintassi</span>
+              <span className="hidden sm:inline">Syntax</span>
             </button>
           </Popover.Trigger>
           <Popover.Portal>
@@ -55,7 +55,7 @@ export function SearchBar({ value, onChange, errors, placeholder }: Props) {
               collisionPadding={12}
               className="z-40 max-h-[70vh] w-[560px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border border-line-3 bg-raised p-4 shadow-[0_20px_50px_rgba(0,0,0,.6)]"
             >
-              <div className="mb-3 text-sm font-semibold">Sintassi di ricerca (stile Scryfall)</div>
+              <div className="mb-3 text-sm font-semibold">Search syntax (Scryfall-style)</div>
               <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 text-[13px]">
                 {QUERY_HELP.map(([k, v]) => (
                   <div key={k} className="contents">

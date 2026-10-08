@@ -31,7 +31,7 @@ function Faces({ card }: { card: Card }) {
             </div>
           )}
           {(f.power != null || f.loyalty != null) && (
-            <div className="font-mono text-sm text-muted">{f.loyalty != null ? `Fedeltà ${f.loyalty}` : `${f.power}/${f.toughness}`}</div>
+            <div className="font-mono text-sm text-muted">{f.loyalty != null ? `Loyalty ${f.loyalty}` : `${f.power}/${f.toughness}`}</div>
           )}
         </div>
       ))}
@@ -79,8 +79,8 @@ function DetailBody({ card }: { card: Card }) {
   return (
     <>
       <div className="flex items-center justify-between">
-        <span className="facet">Dettaglio</span>
-        <Dialog.Close className="btn btn-icon" aria-label="Chiudi">
+        <span className="facet">Details</span>
+        <Dialog.Close className="btn btn-icon" aria-label="Close">
           <X size={16} />
         </Dialog.Close>
       </div>
@@ -89,14 +89,14 @@ function DetailBody({ card }: { card: Card }) {
         <div className="relative w-[190px] shrink-0">
           <CardImage card={card} face={face} size="large" eager />
           {isDoubleFaced(card) && (
-            <button type="button" aria-label="Gira la carta" className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-bg/85 hover:bg-chip" onClick={() => setFace(1 - face)}>
+            <button type="button" aria-label="Flip card" className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-bg/85 hover:bg-chip" onClick={() => setFace(1 - face)}>
               <RefreshCw size={15} />
             </button>
           )}
         </div>
         <div className="flex min-w-[200px] flex-1 flex-col gap-2.5">
           <Dialog.Title className="m-0 text-2xl font-bold tracking-[-0.01em]">{card.name}</Dialog.Title>
-          <Dialog.Description className="sr-only">Dettaglio della carta {card.name}</Dialog.Description>
+          <Dialog.Description className="sr-only">Details for {card.name}</Dialog.Description>
           <div className="flex items-center gap-3">
             <ManaCost cost={card.faces.length ? card.faces[0].mana_cost : card.mana_cost} size={20} />
             <span className="font-mono text-[13px] text-muted">MV {card.cmc}</span>
@@ -107,11 +107,11 @@ function DetailBody({ card }: { card: Card }) {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-[10px] border border-line bg-panel-2 px-3 py-2.5">
-              <div className="text-[11px] text-dim">Acquisto (tot.)</div>
+              <div className="text-[11px] text-dim">Purchase (total)</div>
               <div className="mt-0.5 font-mono text-[17px]">{owned ? fmtEur(purchase) : '—'}</div>
             </div>
             <div className="rounded-[10px] border border-line bg-panel-2 px-3 py-2.5">
-              <div className="text-[11px] text-dim">Mercato (tot.)</div>
+              <div className="text-[11px] text-dim">Market (total)</div>
               <div className="mt-0.5 font-mono text-[17px]">
                 {owned ? fmtEur(market) : fmtEur(marketPrice(card, 'normal', rate))}{' '}
                 {delta != null && (
@@ -130,9 +130,9 @@ function DetailBody({ card }: { card: Card }) {
 
       <section className="flex flex-col gap-2.5">
         <div className="flex items-baseline justify-between">
-          <h3 className="facet m-0">Copie possedute</h3>
+          <h3 className="facet m-0">Owned copies</h3>
           <span className="font-mono text-[13px]">
-            {owned} copi{owned === 1 ? 'a' : 'e'} · {new Set(rows.map((r) => r.binder_name)).size} binder
+            {owned} {owned === 1 ? 'copy' : 'copies'} · {new Set(rows.map((r) => r.binder_name)).size} binder{new Set(rows.map((r) => r.binder_name)).size === 1 ? '' : 's'}
           </span>
         </div>
         {rows.length > 0 ? (
@@ -141,9 +141,9 @@ function DetailBody({ card }: { card: Card }) {
               <thead>
                 <tr className="bg-panel-2 text-left text-dim">
                   <th className="px-3 py-2 font-medium">Binder</th>
-                  <th className="px-3 py-2 font-medium">Stampa</th>
-                  <th className="px-3 py-2 text-right font-medium">Qtà</th>
-                  <th className="px-3 py-2 text-right font-medium">€ merc.</th>
+                  <th className="px-3 py-2 font-medium">Printing</th>
+                  <th className="px-3 py-2 text-right font-medium">Qty</th>
+                  <th className="px-3 py-2 text-right font-medium">€ market</th>
                 </tr>
               </thead>
               <tbody>
@@ -166,16 +166,16 @@ function DetailBody({ card }: { card: Card }) {
             </table>
           </div>
         ) : (
-          <p className="m-0 text-sm text-dim">Non possiedi questa carta.</p>
+          <p className="m-0 text-sm text-dim">You don't own this card.</p>
         )}
       </section>
 
       <section className="flex flex-col gap-2.5">
         <div className="flex items-center justify-between">
-          <h3 className="facet m-0">Nelle tue liste</h3>
+          <h3 className="facet m-0">In your lists</h3>
           {used > 0 && (
             <span className="text-xs text-muted">
-              {used} di {owned} copie usate
+              {used} of {owned} copies used
             </span>
           )}
         </div>
@@ -189,7 +189,7 @@ function DetailBody({ card }: { card: Card }) {
               </Link>
               <span className="flex items-center gap-1.5">
                 <span className="font-mono text-xs text-muted">×{q}</span>
-                <button type="button" className="btn btn-ghost btn-icon min-h-9 w-9" aria-label={`Rimuovi una copia da ${list.name}`} onClick={() => void removeOne(list.id)}>
+                <button type="button" className="btn btn-ghost btn-icon min-h-9 w-9" aria-label={`Remove one copy from ${list.name}`} onClick={() => void removeOne(list.id)}>
                   <Minus size={14} />
                 </button>
               </span>
@@ -202,7 +202,7 @@ function DetailBody({ card }: { card: Card }) {
       </section>
 
       <section className="flex flex-col gap-2.5">
-        <h3 className="facet m-0">Legalità</h3>
+        <h3 className="facet m-0">Legality</h3>
         <div className="flex flex-wrap gap-1.5">
           {FORMATS.map((f) => {
             const ok = card.legal.includes(f)
@@ -217,7 +217,7 @@ function DetailBody({ card }: { card: Card }) {
 
       {card.scryfall_uri && (
         <a href={card.scryfall_uri} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[13px] text-accent hover:text-accent-hi">
-          Apri su Scryfall <ExternalLink size={13} />
+          Open on Scryfall <ExternalLink size={13} />
         </a>
       )}
     </>

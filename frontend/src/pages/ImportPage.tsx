@@ -33,7 +33,7 @@ function DiffList({ title, lines, tone }: { title: string; lines: DiffLine[]; to
       </ul>
       {lines.length > 12 && (
         <button type="button" className="self-start text-xs text-accent hover:text-accent-hi" onClick={() => setAll(!all)}>
-          {all ? 'Mostra meno' : `Mostra tutte (${lines.length})`}
+          {all ? 'Show less' : `Show all (${lines.length})`}
         </button>
       )}
     </section>
@@ -45,20 +45,20 @@ export function DiffSummary({ diff }: { diff: ImportDiff }) {
   return (
     <div className="panel flex flex-col gap-4 px-6 py-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="m-0 text-base font-semibold">Differenze rispetto all’import precedente</h2>
+        <h2 className="m-0 text-base font-semibold">Changes since the previous import</h2>
         {!empty && (
           <span className="font-mono text-sm">
-            <span className="text-ok">+{fmtNum(diff.summary.added_copies)}</span> / <span className="text-bad">−{fmtNum(diff.summary.removed_copies)}</span> copie
+            <span className="text-ok">+{fmtNum(diff.summary.added_copies)}</span> / <span className="text-bad">−{fmtNum(diff.summary.removed_copies)}</span> copies
           </span>
         )}
       </div>
       {empty ? (
-        <p className="m-0 text-sm text-muted">Nessuna differenza: la collezione è identica.</p>
+        <p className="m-0 text-sm text-muted">No changes: the collection is identical.</p>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,360px),1fr))] gap-6">
-          <DiffList title="Aggiunte" lines={diff.added} tone="add" />
-          <DiffList title="Rimosse" lines={diff.removed} tone="remove" />
-          <DiffList title="Quantità cambiate" lines={diff.changed} tone="change" />
+          <DiffList title="Added" lines={diff.added} tone="add" />
+          <DiffList title="Removed" lines={diff.removed} tone="remove" />
+          <DiffList title="Quantity changed" lines={diff.changed} tone="change" />
         </div>
       )}
     </div>
@@ -87,7 +87,7 @@ export function ImportPage() {
             await loadCollection()
             await listsChanged()
             setDiff(await api.importDiff(id))
-            toast.success(`Import completato: ${fmtNum(info.total_quantity)} copie`)
+            toast.success(`Import complete: ${fmtNum(info.total_quantity)} ${info.total_quantity === 1 ? 'copy' : 'copies'}`)
           }
           return
         }
@@ -130,7 +130,7 @@ export function ImportPage() {
       }
       await loadCollection()
       await listsChanged()
-      toast.success('Prezzi aggiornati')
+      toast.success('Prices updated')
     } catch (e) {
       toast.error((e as Error).message)
     }
@@ -139,9 +139,9 @@ export function ImportPage() {
   return (
     <main className="mx-auto flex w-full max-w-[960px] flex-col gap-6 px-4 pb-14 pt-8 sm:px-7">
       <div className="flex flex-col gap-1.5">
-        <h1 className="m-0 text-[26px] font-bold tracking-[-0.02em]">{current ? 'Importa un nuovo export' : 'Benvenuto in ManaBox Cuber'}</h1>
+        <h1 className="m-0 text-[26px] font-bold tracking-[-0.02em]">{current ? 'Import a new export' : 'Welcome to ManaBox Viewer'}</h1>
         <p className="m-0 text-sm text-muted">
-          In ManaBox: <em>Collection → menu → Export → CSV</em>. Il file viene arricchito con i dati di Scryfall (testi, colori, prezzi, immagini); le liste restano agganciate alle carte anche dopo un nuovo import.
+          In ManaBox: <em>Collection → menu → Export → CSV</em>. The file is enriched with Scryfall data (text, colors, prices, images); lists stay linked to their cards across new imports.
         </p>
       </div>
 
@@ -164,8 +164,8 @@ export function ImportPage() {
         }}
       >
         <FileUp size={34} className="text-accent" />
-        <span className="text-base font-semibold">Trascina qui il CSV di ManaBox</span>
-        <span className="text-sm text-muted">oppure clicca per sceglierlo</span>
+        <span className="text-base font-semibold">Drop your ManaBox CSV here</span>
+        <span className="text-sm text-muted">or click to choose it</span>
         <input
           ref={inputRef}
           type="file"
@@ -184,7 +184,7 @@ export function ImportPage() {
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm font-semibold">{job.filename}</span>
             <span className="font-mono text-xs text-muted">
-              {fmtNum(job.row_count)} righe · {fmtNum(job.total_quantity)} copie
+              {fmtNum(job.row_count)} {job.row_count === 1 ? 'row' : 'rows'} · {fmtNum(job.total_quantity)} {job.total_quantity === 1 ? 'copy' : 'copies'}
             </span>
           </div>
           {job.status === 'enriching' && (
@@ -192,20 +192,20 @@ export function ImportPage() {
               <div className="h-2 overflow-hidden rounded-full bg-[#1D2028]">
                 <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${Math.max(3, job.progress * 100)}%` }} />
               </div>
-              <span className="text-xs text-muted">Scarico i dati delle carte da Scryfall… {Math.round(job.progress * 100)}%</span>
+              <span className="text-xs text-muted">Downloading card data from Scryfall… {Math.round(job.progress * 100)}%</span>
             </>
           )}
           {job.status === 'ready' && (
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-2 text-sm text-ok">
-                <CheckCircle2 size={17} /> Import completato
+                <CheckCircle2 size={17} /> Import complete
               </span>
               <button type="button" className="btn btn-primary ml-auto" onClick={() => navigate('/')}>
-                Vai alla collezione
+                Go to collection
               </button>
             </div>
           )}
-          {job.status === 'error' && <span className="text-sm text-bad">Import fallito: {job.error}</span>}
+          {job.status === 'error' && <span className="text-sm text-bad">Import failed: {job.error}</span>}
         </div>
       )}
 
@@ -214,18 +214,18 @@ export function ImportPage() {
       {current && (
         <div className="panel flex flex-wrap items-center gap-x-6 gap-y-3 px-6 py-5">
           <div className="flex flex-col gap-0.5">
-            <span className="facet">Collezione attuale</span>
+            <span className="facet">Current collection</span>
             <span className="text-sm">
-              {current.filename} · importato il {fmtDate(current.imported_at)} · {fmtNum(current.total_quantity)} copie
+              {current.filename} · imported {fmtDate(current.imported_at)} · {fmtNum(current.total_quantity)} {current.total_quantity === 1 ? 'copy' : 'copies'}
             </span>
             <span className="text-xs text-dim">
-              Prezzi aggiornati il {fmtDate(prices?.updated_at ?? current.imported_at)}
-              {prices?.status === 'error' && ` · ultimo aggiornamento fallito: ${prices.error}`}
+              Prices updated {fmtDate(prices?.updated_at ?? current.imported_at)}
+              {prices?.status === 'error' && ` · last update failed: ${prices.error}`}
             </span>
           </div>
           <button type="button" className="btn ml-auto" disabled={prices?.status === 'running'} onClick={() => void refreshPrices()}>
             <RefreshCw size={15} className={prices?.status === 'running' ? 'animate-spin' : ''} />
-            {prices?.status === 'running' ? `Aggiorno… ${Math.round(prices.progress * 100)}%` : 'Aggiorna prezzi'}
+            {prices?.status === 'running' ? `Updating… ${Math.round(prices.progress * 100)}%` : 'Update prices'}
           </button>
         </div>
       )}

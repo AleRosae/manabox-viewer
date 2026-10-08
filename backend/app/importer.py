@@ -133,7 +133,7 @@ def _enrich(conn: sqlite3.Connection, import_id: int, client: ScryfallClient) ->
             if new_id:
                 conn.execute("UPDATE collection_rows SET scryfall_id = ? WHERE id = ?", (new_id, r["id"]))
             else:
-                log.warning("Carta non trovata su Scryfall: %s (%s %s)", r["name"], r["set_code"], r["collector_number"])
+                log.warning("Card not found on Scryfall: %s (%s %s)", r["name"], r["set_code"], r["collector_number"])
                 conn.execute("UPDATE collection_rows SET scryfall_id = NULL WHERE id = ?", (r["id"],))
     conn.commit()
 

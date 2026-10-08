@@ -28,21 +28,21 @@ def _int(value: str | None, line: int) -> int:
     try:
         return int((value or "").strip())
     except ValueError as exc:
-        raise CsvFormatError(f"Riga {line}: quantità non valida '{value}'") from exc
+        raise CsvFormatError(f"Line {line}: invalid quantity '{value}'") from exc
 
 
 def parse_manabox_csv(content: bytes) -> list[dict]:
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
-        raise CsvFormatError("Il file non è in UTF-8") from exc
+        raise CsvFormatError("The file is not UTF-8") from exc
 
     reader = csv.DictReader(io.StringIO(text))
     header = set(reader.fieldnames or [])
     missing = REQUIRED_COLUMNS - header
     if missing:
         raise CsvFormatError(
-            "Non sembra un export di ManaBox: colonne mancanti " + ", ".join(sorted(missing))
+            "This does not look like a ManaBox export: missing columns " + ", ".join(sorted(missing))
         )
 
     rows = []
@@ -55,7 +55,7 @@ def parse_manabox_csv(content: bytes) -> list[dict]:
             continue
         rows.append(
             {
-                "binder_name": (raw.get("Binder Name") or "").strip() or "Senza binder",
+                "binder_name": (raw.get("Binder Name") or "").strip() or "No binder",
                 "binder_type": (raw.get("Binder Type") or "").strip() or None,
                 "name": name,
                 "set_code": (raw.get("Set code") or "").strip().upper(),
@@ -78,7 +78,7 @@ def parse_manabox_csv(content: bytes) -> list[dict]:
             }
         )
     if not rows:
-        raise CsvFormatError("Il file non contiene carte")
+        raise CsvFormatError("The file contains no cards")
     return rows
 
 

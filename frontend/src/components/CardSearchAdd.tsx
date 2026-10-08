@@ -73,12 +73,12 @@ export function CardSearchAdd({ listId }: { listId: number }) {
     try {
       const oracle = index?.oracleByName.get(opt.name.toLowerCase())
       const scryfallId = oracle ? index?.bestPrintByOracle.get(oracle) : (await api.named(opt.name)).id
-      if (!scryfallId) throw new Error('carta non trovata')
+      if (!scryfallId) throw new Error('card not found')
       await addToList(listId, [{ scryfall_id: scryfallId, quantity: 1 }])
       setQ('')
       setOpen(false)
     } catch (err) {
-      toast.error(`Impossibile aggiungere ${opt.name}: ${(err as Error).message}`)
+      toast.error(`Could not add ${opt.name}: ${(err as Error).message}`)
     } finally {
       setBusy(false)
     }
@@ -92,8 +92,8 @@ export function CardSearchAdd({ listId }: { listId: number }) {
           role="combobox"
           aria-expanded={open && options.length > 0}
           aria-controls="card-search-options"
-          aria-label="Aggiungi carta alla lista"
-          placeholder="Aggiungi carta…"
+          aria-label="Add card to list"
+          placeholder="Add card…"
           className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-dim"
           value={q}
           disabled={busy}
@@ -116,7 +116,7 @@ export function CardSearchAdd({ listId }: { listId: number }) {
             } else if (e.key === 'Escape') setOpen(false)
           }}
         />
-        <span className="hidden text-[11.5px] text-dim sm:inline">collezione + Scryfall</span>
+        <span className="hidden text-[11.5px] text-dim sm:inline">collection + Scryfall</span>
       </label>
       {open && options.length > 0 && (
         <ul id="card-search-options" role="listbox" className="absolute inset-x-0 top-[50px] z-30 m-0 flex list-none flex-col gap-0.5 rounded-xl border border-line-3 bg-raised p-1.5 shadow-[0_20px_50px_rgba(0,0,0,.6)]">
@@ -138,12 +138,12 @@ export function CardSearchAdd({ listId }: { listId: number }) {
                   {o.owned}× · {o.binders.join(', ')}
                 </span>
               ) : (
-                <span className="pill bg-[#2A2D35] text-muted">NON POSSEDUTA</span>
+                <span className="pill bg-[#2A2D35] text-muted">NOT OWNED</span>
               )}
             </li>
           ))}
           <li className="mt-1 border-t border-line-2 px-3 pb-1 pt-2 text-[11.5px] text-dim">
-            Invio per aggiungere · le carte non possedute restano solo in questa lista
+            Enter to add · cards you don’t own stay only in this list
           </li>
         </ul>
       )}

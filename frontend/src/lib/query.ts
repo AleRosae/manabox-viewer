@@ -123,7 +123,7 @@ export function parseQuery(input: string): ParseResult {
     if (tok.t === 'lp') {
       const inner = parseOr()
       if (tokens[pos]?.t === 'rp') pos++
-      else errors.push('Parentesi non chiusa')
+      else errors.push('Unclosed parenthesis')
       return inner
     }
     if (tok.t === 'word') {
@@ -131,7 +131,7 @@ export function parseQuery(input: string): ParseResult {
       if (m && !tok.exact) {
         const key = m[1].toLowerCase()
         if (!(key in MATCHERS)) {
-          errors.push(`Filtro sconosciuto: ${m[1]}`)
+          errors.push(`Unknown filter: ${m[1]}`)
           return null
         }
         return { type: 'term', key, op: m[2] as Op, value: m[3] }
@@ -145,7 +145,7 @@ export function parseQuery(input: string): ParseResult {
   while (pos < tokens.length) {
     const part = parseOr()
     if (tokens[pos]?.t === 'rp') {
-      errors.push('Parentesi chiusa in più')
+      errors.push('Unmatched closing parenthesis')
       pos++
     }
     if (part) node = node ? { type: 'and', children: [node, part] } : part
@@ -394,22 +394,22 @@ export function matches(node: Node | null, e: Entry): boolean {
 }
 
 export const QUERY_HELP: [string, string][] = [
-  ['nome libero', 'parte del nome, oppure !"Nome esatto"'],
-  ['c: / color:', 'colori: c:ub, c=r, c<=wu, c:m (multi), c:c (incolore), c:azorius'],
-  ['id: / identity:', 'identità di colore (id:esper = al più W/U/B)'],
-  ['t: / type:', 'tipo: t:creature, t:"legendary elf"'],
-  ['o: / oracle:', 'testo: o:"draw a card", o:~ (nome della carta)'],
-  ['m: / mana:', 'simboli di mana: m:{G}{G}, m=2UU'],
+  ['plain text', 'part of the name, or !"Exact name"'],
+  ['c: / color:', 'colors: c:ub, c=r, c<=wu, c:m (multi), c:c (colorless), c:azorius'],
+  ['id: / identity:', 'color identity (id:esper = at most W/U/B)'],
+  ['t: / type:', 'type: t:creature, t:"legendary elf"'],
+  ['o: / oracle:', 'text: o:"draw a card", o:~ (card name)'],
+  ['m: / mana:', 'mana symbols: m:{G}{G}, m=2UU'],
   ['mv: / cmc:', 'mana value: mv<=3, mv=0, mv:even'],
-  ['pow: tou: loy:', 'forza, costituzione, fedeltà: pow>=4'],
-  ['r: / rarity:', 'rarità: r:mythic, r>=rare'],
-  ['s: / set:', 'codice espansione: s:mh1'],
-  ['cn:', 'numero da collezione'],
-  ['a: / kw:', 'artista, keyword: kw:flying'],
-  ['f: / format:', 'legalità: f:pauper, f:commander'],
+  ['pow: tou: loy:', 'power, toughness, loyalty: pow>=4'],
+  ['r: / rarity:', 'rarity: r:mythic, r>=rare'],
+  ['s: / set:', 'set code: s:mh1'],
+  ['cn:', 'collector number'],
+  ['a: / kw:', 'artist, keyword: kw:flying'],
+  ['f: / format:', 'legality: f:pauper, f:commander'],
   ['is: / not:', 'foil, etched, dfc, mdfc, legendary, commander, permanent, vanilla, proxy…'],
-  ['eur: buy: value:', 'prezzo di mercato, d’acquisto, valore totale: eur>=5'],
-  ['qty: binder: lang:', 'copie, binder, lingua: qty>1, binder:"binder A", lang:it'],
-  ['year: game:', 'anno di uscita, gioco: year>=2020, game:arena'],
-  ['OR, -, ( )', 'alternative, negazione, raggruppamento: (t:instant OR t:sorcery) -c:r'],
+  ['eur: buy: value:', 'market price, purchase price, total value: eur>=5'],
+  ['qty: binder: lang:', 'copies, binder, language: qty>1, binder:"binder A", lang:it'],
+  ['year: game:', 'release year, game: year>=2020, game:arena'],
+  ['OR, -, ( )', 'alternatives, negation, grouping: (t:instant OR t:sorcery) -c:r'],
 ]

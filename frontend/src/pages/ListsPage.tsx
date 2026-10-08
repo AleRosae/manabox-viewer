@@ -1,7 +1,8 @@
 import clsx from 'clsx'
-import { Boxes } from 'lucide-react'
+import { Boxes, FileDown } from 'lucide-react'
 import { useState } from 'react'
 import { Navigate, NavLink, useNavigate, useParams } from 'react-router-dom'
+import { ImportListDialog } from '../components/ImportListDialog'
 import { ListDetailView } from '../components/ListDetailView'
 import { createList } from '../lib/listActions'
 import type { ListKind } from '../lib/types'
@@ -15,7 +16,7 @@ function NewListForm() {
   if (!open)
     return (
       <button type="button" className="mt-2 min-h-11 rounded-[9px] border border-dashed border-[#3A3F4B] text-[13px] font-semibold text-accent hover:border-accent" onClick={() => setOpen(true)}>
-        + Nuova lista
+        + New list
       </button>
     )
   return (
@@ -30,24 +31,36 @@ function NewListForm() {
         navigate(`/lists/${list.id}`)
       }}
     >
-      <input autoFocus className="field" placeholder="Nome della lista" aria-label="Nome della lista" value={name} onChange={(e) => setName(e.target.value)} />
-      <div className="flex rounded-[9px] border border-line bg-panel-2 p-[3px]" role="group" aria-label="Tipo di lista">
+      <input autoFocus className="field" placeholder="List name" aria-label="List name" value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="flex rounded-[9px] border border-line bg-panel-2 p-[3px]" role="group" aria-label="List type">
         <button type="button" className={clsx('seg flex-1', kind === 'cube' && 'seg-on')} onClick={() => setKind('cube')}>
-          Cubo
+          Cube
         </button>
         <button type="button" className={clsx('seg flex-1', kind === 'generic' && 'seg-on')} onClick={() => setKind('generic')}>
-          Generica
+          Generic
         </button>
       </div>
       <div className="flex justify-end gap-2">
         <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
-          Annulla
+          Cancel
         </button>
         <button type="submit" className="btn btn-primary" disabled={!name.trim()}>
-          Crea
+          Create
         </button>
       </div>
     </form>
+  )
+}
+
+function ImportListButton() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" className="flex min-h-11 items-center justify-center gap-2 rounded-[9px] text-[13px] font-semibold text-muted hover:bg-panel-2 hover:text-fg" onClick={() => setOpen(true)}>
+        <FileDown size={15} /> Import list
+      </button>
+      {open && <ImportListDialog onClose={() => setOpen(false)} />}
+    </>
   )
 }
 
@@ -64,7 +77,7 @@ export function ListsPage() {
   return (
     <div className="flex flex-1 flex-wrap">
       <aside className="flex w-full flex-col gap-1.5 border-line bg-side px-4 py-[22px] lg:sticky lg:top-[69px] lg:max-h-[calc(100vh-69px)] lg:w-[280px] lg:overflow-y-auto lg:border-r">
-        <span className="facet px-1.5 pb-2.5">Le tue liste</span>
+        <span className="facet px-1.5 pb-2.5">Your lists</span>
         {lists.map((l) => (
           <NavLink
             key={l.id}
@@ -78,6 +91,7 @@ export function ListsPage() {
           </NavLink>
         ))}
         <NewListForm />
+        <ImportListButton />
       </aside>
 
       <main className="flex min-w-0 flex-[999_1_640px] flex-col gap-5 px-4 pb-14 pt-6 sm:px-8">
@@ -86,9 +100,9 @@ export function ListsPage() {
         ) : (
           <div className="panel flex flex-col items-center gap-3 px-6 py-20 text-center">
             <Boxes size={32} className="text-accent" />
-            <span className="text-lg font-semibold">Nessuna lista</span>
+            <span className="text-lg font-semibold">No lists yet</span>
             <span className="max-w-md text-sm text-muted">
-              Crea un cubo o una lista generica, poi aggiungi carte dalla collezione (singolarmente o con la selezione multipla) o cercandole su Scryfall.
+              Create a cube or a generic list, then add cards from your collection (one by one or with multi-selection) or by searching Scryfall. Got a list from a friend? Import it.
             </span>
           </div>
         )}

@@ -57,7 +57,7 @@ function TableRow({ entry, index, selected, selectionMode, onSelect, onOpen }: {
           type="checkbox"
           className="h-4 w-4 accent-accent"
           checked={selected}
-          aria-label={`Seleziona ${entry.card.name}`}
+          aria-label={`Select ${entry.card.name}`}
           onChange={(e) => onSelect(entry.key, index, (e.nativeEvent as MouseEvent).shiftKey)}
         />
       </label>
@@ -92,15 +92,15 @@ export function CollectionTable({ entries, selected, selectionMode, sort, dir, o
       <div className="min-w-[980px]">
         <div className={clsx('sticky top-0 z-10 grid items-center bg-panel-2 text-xs text-dim', COLS)}>
           <span />
-          <Header label="Nome" k="name" {...h} />
-          <Header label="Tipo" {...h} />
+          <Header label="Name" k="name" {...h} />
+          <Header label="Type" {...h} />
           <Header label="Set" k="set" {...h} />
-          <Header label="Rarità" k="rarity" {...h} />
+          <Header label="Rarity" k="rarity" {...h} />
           <Header label="MV" k="mv" right {...h} />
-          <Header label="Qtà" k="qty" right {...h} />
+          <Header label="Qty" k="qty" right {...h} />
           <Header label="Binder" {...h} />
-          <Header label="€ acq." right {...h} />
-          <Header label="€ merc." k="price" right {...h} />
+          <Header label="€ paid" right {...h} />
+          <Header label="€ market" k="price" right {...h} />
         </div>
         <div ref={ref} className="relative" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((v) => {

@@ -44,3 +44,27 @@ def plain_text(items: list[dict]) -> str:
         for i in sorted(items, key=lambda i: i["card"]["name"])
     ]
     return "\n".join(lines) + "\n"
+
+
+VIEWER_MAGIC = "# ManaBox Viewer list v1"
+
+
+def viewer_list(lst: dict, items: list[dict], exported_on: str) -> str:
+    """The app's own sharing format: the plain text lines plus the exporter's owned copies.
+
+    Everything after '|' is ignored by tools that only read '1 Name (SET) 123'.
+    """
+    lines = [VIEWER_MAGIC, f"# name: {lst['name']}", f"# kind: {lst['kind']}", f"# exported: {exported_on}"]
+    for i in sorted(items, key=lambda i: i["card"]["name"]):
+        card = i["card"]
+        owned = min(i["owned"], i["quantity"])
+        lines.append(f'{i["quantity"]} {card["name"]} ({card["set"].upper()}) {card["collector_number"]} | owned {owned}')
+    return "\n".join(lines) + "\n"
+
+
+def missing_text(items: list[dict]) -> str:
+    """Plain text of the copies not in the collection: a shopping list."""
+    missing = [
+        {**i, "quantity": i["quantity"] - i["owned"]} for i in items if i["owned"] < i["quantity"]
+    ]
+    return plain_text(missing) if missing else ""

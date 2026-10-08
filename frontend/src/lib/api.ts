@@ -1,4 +1,4 @@
-import type { Card, CollectionData, ImportDiff, ImportInfo, ListDetail, ListKind, ListSummary, Status, Usage } from './types'
+import type { Card, CollectionData, ImportDiff, ImportInfo, ListDetail, ListImportPreview, ListKind, ListSummary, Status, Usage } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -11,7 +11,7 @@ export class ApiError extends Error {
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(url, init)
   if (!resp.ok) {
-    let message = `Errore ${resp.status}`
+    let message = `Error ${resp.status}`
     try {
       const body = await resp.json()
       if (typeof body?.detail === 'string') message = body.detail
@@ -62,7 +62,14 @@ export const api = {
     request<unknown>(`/api/lists/${listId}/items/${itemId}`, json('PATCH', patch)),
   deleteItem: (listId: number, itemId: number) =>
     request<void>(`/api/lists/${listId}/items/${itemId}`, { method: 'DELETE' }),
-  exportUrl: (id: number, format: 'cubecobra_csv' | 'txt') => `/api/lists/${id}/export?format=${format}`,
+  exportUrl: (id: number, format: 'cubecobra_csv' | 'txt' | 'viewer' | 'missing') => `/api/lists/${id}/export?format=${format}`,
+  previewListImport: (text: string) => request<ListImportPreview>('/api/lists/import/preview', json('POST', { text })),
+  importList: (body: {
+    name: string
+    kind: ListKind
+    shared_by: string | null
+    items: { scryfall_id: string; quantity: number; their_owned: number | null }[]
+  }) => request<ListSummary>('/api/lists/import', json('POST', body)),
 
   autocomplete: (q: string) => request<string[]>(`/api/scryfall/autocomplete?q=${encodeURIComponent(q)}`),
   named: (name: string) => request<Card>(`/api/scryfall/named?name=${encodeURIComponent(name)}`),

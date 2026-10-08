@@ -123,6 +123,8 @@ export interface ListSummary {
   name: string
   description: string
   kind: ListKind
+  /** who shared the list, when it was imported from someone else's export */
+  shared_by: string | null
   created_at: string
   updated_at: string
   card_count: number
@@ -140,6 +142,8 @@ export interface ListItem {
   owned: number
   used_elsewhere: number
   ownership: Ownership
+  /** copies the sharer owned (imported lists only); null when unknown */
+  their_owned: number | null
   card: Card
 }
 
@@ -163,4 +167,21 @@ export interface Entry {
   marketValue: number
   purchaseValue: number
   addedAt: string | null
+}
+
+export interface ListImportPreviewItem {
+  oracle_id: string
+  scryfall_id: string
+  quantity: number
+  owned: number
+  ownership: Ownership
+  their_owned: number | null
+  card: Card
+}
+
+export interface ListImportPreview {
+  meta: { name: string | null; kind: ListKind | null; has_ownership: boolean }
+  items: ListImportPreviewItem[]
+  /** lines that could not be parsed or matched to a card */
+  unresolved: string[]
 }

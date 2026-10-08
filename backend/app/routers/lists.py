@@ -7,8 +7,9 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from .. import db
-from ..cards import ensure_card, get_slims, now_iso, oracle_id_of
-from ..exporters import cubecobra_csv, plain_text
+from ..cards import ensure_card, get_slims, now_iso, oracle_id_of, slim
+from ..exporters import cubecobra_csv, missing_text, plain_text, viewer_list
+from ..list_import import merge_by_oracle, parse_list_text, resolve_lines
 from ..scryfall import ScryfallError, get_client
 
 router = APIRouter(prefix="/api/lists", tags=["lists"])
@@ -33,6 +34,23 @@ class BulkItem(BaseModel):
 
 class BulkIn(BaseModel):
     items: list[BulkItem]
+
+
+class ImportPreviewIn(BaseModel):
+    text: str = Field(min_length=1, max_length=500_000)
+
+
+class ImportItem(BaseModel):
+    scryfall_id: str
+    quantity: int = Field(ge=1, le=999)
+    their_owned: int | None = Field(None, ge=0)
+
+
+class ImportIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    kind: str = Field("generic", pattern="^(cube|generic)$")
+    shared_by: str | None = Field(None, max_length=60)
+    items: list[ImportItem] = Field(min_length=1)
 
 
 class ItemPatch(BaseModel):
@@ -63,7 +81,7 @@ def usage_by_oracle(conn: sqlite3.Connection) -> dict[str, dict[int, int]]:
 def _get_list(conn: sqlite3.Connection, list_id: int):
     row = conn.execute("SELECT * FROM lists WHERE id = ?", (list_id,)).fetchone()
     if not row:
-        raise HTTPException(404, "Lista non trovata")
+        raise HTTPException(404, "List not found")
     return row
 
 
@@ -100,6 +118,7 @@ def _items(conn: sqlite3.Connection, list_id: int) -> list[dict]:
             "owned": own,
             "used_elsewhere": elsewhere,
             "ownership": _ownership(own, r["quantity"]),
+            "their_owned": r["their_owned"],
             "card": card,
         })
     return out
@@ -129,6 +148,69 @@ def create_list(body: ListIn, conn: sqlite3.Connection = Depends(db.get_conn)):
         (body.name.strip(), body.description, body.kind, ts, ts),
     )
     return dict(_get_list(conn, cur.lastrowid))
+
+
+@router.post("/import/preview")
+def import_preview(body: ImportPreviewIn, conn: sqlite3.Connection = Depends(db.get_conn)):
+    """Resolve a pasted/uploaded list and compare it with the collection, without saving anything."""
+    meta, lines, invalid = parse_list_text(body.text)
+    try:
+        resolved, unresolved = resolve_lines(conn, get_client(), lines)
+    except ScryfallError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    owned = owned_by_oracle(conn)
+    items = []
+    for entry in merge_by_oracle(resolved):
+        own = owned.get(entry["oracle_id"], 0)
+        items.append({
+            "oracle_id": entry["oracle_id"],
+            "scryfall_id": entry["card"]["id"],
+            "quantity": entry["quantity"],
+            "owned": own,
+            "ownership": _ownership(own, entry["quantity"]),
+            "their_owned": entry["their_owned"],
+            "card": slim(entry["card"]),
+        })
+    items.sort(key=lambda i: i["card"]["name"])
+    kind = meta.get("kind", "")
+    return {
+        "meta": {
+            "name": meta.get("name"),
+            "kind": kind if kind in ("cube", "generic") else None,
+            "has_ownership": any(i["their_owned"] is not None for i in items),
+        },
+        "items": items,
+        "unresolved": invalid + [l.raw for l in unresolved],
+    }
+
+
+@router.post("/import", status_code=201)
+def import_list(body: ImportIn, conn: sqlite3.Connection = Depends(db.get_conn)):
+    ts = now_iso()
+    shared_by = (body.shared_by or "").strip() or None
+    list_id = conn.execute(
+        "INSERT INTO lists (name, description, kind, shared_by, created_at, updated_at) VALUES (?, '', ?, ?, ?, ?)",
+        (body.name.strip(), body.kind, shared_by, ts, ts),
+    ).lastrowid
+    client = get_client()
+    for item in body.items:
+        try:
+            card = ensure_card(conn, client, item.scryfall_id)
+        except ScryfallError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        if card is None:
+            raise HTTPException(404, f"Card {item.scryfall_id} not found")
+        their = min(item.their_owned, item.quantity) if item.their_owned is not None else None
+        conn.execute(
+            """INSERT INTO list_items (list_id, oracle_id, preferred_scryfall_id, quantity, their_owned, added_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT (list_id, oracle_id) DO UPDATE SET
+                 quantity = quantity + excluded.quantity,
+                 their_owned = CASE WHEN their_owned IS NULL AND excluded.their_owned IS NULL THEN NULL
+                                    ELSE COALESCE(their_owned, 0) + COALESCE(excluded.their_owned, 0) END""",
+            (list_id, oracle_id_of(card), card["id"], item.quantity, their, ts),
+        )
+    return dict(_get_list(conn, list_id))
 
 
 @router.get("/{list_id}")
@@ -165,7 +247,7 @@ def bulk_items(list_id: int, body: BulkIn, conn: sqlite3.Connection = Depends(db
         except ScryfallError as exc:
             raise HTTPException(502, str(exc)) from exc
         if card is None:
-            raise HTTPException(404, f"Carta {item.scryfall_id} non trovata")
+            raise HTTPException(404, f"Card {item.scryfall_id} not found")
         oracle_id = oracle_id_of(card)
         existing = conn.execute(
             "SELECT id, quantity FROM list_items WHERE list_id = ? AND oracle_id = ?", (list_id, oracle_id)
@@ -195,13 +277,13 @@ def update_item(list_id: int, item_id: int, body: ItemPatch, conn: sqlite3.Conne
         "SELECT * FROM list_items WHERE id = ? AND list_id = ?", (item_id, list_id)
     ).fetchone()
     if not item:
-        raise HTTPException(404, "Elemento non trovato")
+        raise HTTPException(404, "Item not found")
     if body.quantity is not None:
         conn.execute("UPDATE list_items SET quantity = ? WHERE id = ?", (body.quantity, item_id))
     if body.preferred_scryfall_id is not None:
         card = ensure_card(conn, get_client(), body.preferred_scryfall_id)
         if card is None or oracle_id_of(card) != item["oracle_id"]:
-            raise HTTPException(422, "La stampa scelta non corrisponde alla carta")
+            raise HTTPException(422, "The chosen printing is not the same card")
         conn.execute("UPDATE list_items SET preferred_scryfall_id = ? WHERE id = ?", (card["id"], item_id))
     _touch(conn, list_id)
     return {"ok": True}
@@ -216,17 +298,19 @@ def delete_item(list_id: int, item_id: int, conn: sqlite3.Connection = Depends(d
 @router.get("/{list_id}/export")
 def export_list(
     list_id: int,
-    format: str = Query("cubecobra_csv", pattern="^(cubecobra_csv|txt)$"),
+    format: str = Query("cubecobra_csv", pattern="^(cubecobra_csv|txt|viewer|missing)$"),
     conn: sqlite3.Connection = Depends(db.get_conn),
 ):
     lst = _get_list(conn, list_id)
     items = _items(conn, list_id)
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", lst["name"]).strip("_") or "lista"
-    if format == "txt":
-        return PlainTextResponse(
-            plain_text(items),
-            headers={"Content-Disposition": f'attachment; filename="{slug}.txt"'},
-        )
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", lst["name"]).strip("_") or "list"
+    if format in ("txt", "viewer", "missing"):
+        text, filename = {
+            "txt": (lambda: plain_text(items), f"{slug}.txt"),
+            "viewer": (lambda: viewer_list(dict(lst), items, now_iso()[:10]), f"{slug}.mbv.txt"),
+            "missing": (lambda: missing_text(items), f"{slug}_missing.txt"),
+        }[format]
+        return PlainTextResponse(text(), headers={"Content-Disposition": f'attachment; filename="{filename}"'})
     return PlainTextResponse(
         cubecobra_csv(items),
         media_type="text/csv",

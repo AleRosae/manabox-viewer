@@ -1,8 +1,8 @@
 services:
-  manabox-cuber:
+  manabox-viewer:
     build: .
-    image: manabox-cuber
-    container_name: manabox-cuber
+    image: manabox-viewer
+    container_name: manabox-viewer
     ports:
       - "${PORT:-8080}:8080"
     volumes:

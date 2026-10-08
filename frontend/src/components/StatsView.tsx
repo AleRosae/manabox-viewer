@@ -61,7 +61,7 @@ interface Props {
   onCardClick?: (cardId: string) => void
 }
 
-export function StatsView({ stats, showPurchase = true, showBinders = false, topTitle = 'Carte di maggior valore', onCardClick }: Props) {
+export function StatsView({ stats, showPurchase = true, showBinders = false, topTitle = 'Most valuable cards', onCardClick }: Props) {
   const delta = stats.purchaseValue ? ((stats.marketValue - stats.purchaseValue) / stats.purchaseValue) * 100 : null
   const rarityTotal = stats.rarity.reduce((n, r) => n + r.value, 0) || 1
 
@@ -69,24 +69,24 @@ export function StatsView({ stats, showPurchase = true, showBinders = false, top
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3.5">
         <Kpi
-          label="Valore di mercato"
+          label="Market value"
           value={fmtEur(stats.marketValue)}
           hint={
             delta != null
-              ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% vs acquisto`
+              ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% vs purchase`
               : stats.missingPrice
-                ? `${fmtNum(stats.missingPrice)} copie senza prezzo`
+                ? `${fmtNum(stats.missingPrice)} ${stats.missingPrice === 1 ? 'copy' : 'copies'} without price`
                 : 'Scryfall, EUR'
           }
         />
-        {showPurchase && <Kpi label="Valore d'acquisto" value={fmtEur(stats.purchaseValue)} hint="dal CSV ManaBox" />}
-        <Kpi label="Copie" value={fmtNum(stats.copies)} hint={`${fmtNum(stats.foilCopies)} foil / etched`} />
-        <Kpi label="Carte uniche" value={fmtNum(stats.unique)} hint="per nome" />
-        <Kpi label="Espansioni" value={fmtNum(stats.sets)} hint={stats.avgMv != null ? `MV medio ${stats.avgMv.toFixed(2).replace('.', ',')}` : undefined} />
+        {showPurchase && <Kpi label="Purchase value" value={fmtEur(stats.purchaseValue)} hint="from ManaBox CSV" />}
+        <Kpi label="Copies" value={fmtNum(stats.copies)} hint={`${fmtNum(stats.foilCopies)} foil / etched`} />
+        <Kpi label="Unique cards" value={fmtNum(stats.unique)} hint="by name" />
+        <Kpi label="Sets" value={fmtNum(stats.sets)} hint={stats.avgMv != null ? `Avg MV ${stats.avgMv.toFixed(2)}` : undefined} />
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] items-start gap-4">
-        <Panel title="Colori" note="mono · multi · incolore · terre">
+        <Panel title="Colors" note="mono · multi · colorless · lands">
           <HBars
             labelWidth={100}
             bars={stats.colors.map((b) => ({
@@ -103,7 +103,7 @@ export function StatsView({ stats, showPurchase = true, showBinders = false, top
           />
         </Panel>
 
-        <Panel title="Curva di mana" note="terre escluse">
+        <Panel title="Mana curve" note="lands excluded">
           <div className="h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.curve} margin={{ top: 22, right: 4, left: 4, bottom: 0 }}>
@@ -112,7 +112,7 @@ export function StatsView({ stats, showPurchase = true, showBinders = false, top
                   cursor={{ fill: '#ffffff08' }}
                   contentStyle={{ background: '#1B1E26', border: '1px solid #343946', borderRadius: 10, fontSize: 13 }}
                   labelFormatter={(l) => `MV ${l}`}
-                  formatter={(v) => [fmtNum(Number(v)), 'copie']}
+                  formatter={(v) => [fmtNum(Number(v)), 'copies']}
                 />
                 <RBar dataKey="value" fill="#E8A33D" radius={[6, 6, 0, 0]} isAnimationActive={false}>
                   <LabelList dataKey="value" position="top" fill="#9AA0AA" fontSize={11} fontFamily="Geist Mono" formatter={(v) => (Number(v) ? fmtNum(Number(v)) : '')} />
@@ -122,7 +122,7 @@ export function StatsView({ stats, showPurchase = true, showBinders = false, top
           </div>
         </Panel>
 
-        <Panel title="Rarità">
+        <Panel title="Rarity">
           <div className="flex h-[18px] gap-0.5 overflow-hidden rounded-full">
             {stats.rarity.map((r) => (
               <div key={r.key} title={`${r.label}: ${r.value}`} style={{ width: `${(r.value / rarityTotal) * 100}%`, background: RARITY_COLOR[r.key] }} />
@@ -137,11 +137,11 @@ export function StatsView({ stats, showPurchase = true, showBinders = false, top
               </span>
             ))}
           </div>
-          <h2 className="m-0 mt-2 text-[15px] font-semibold">Tipi</h2>
+          <h2 className="m-0 mt-2 text-[15px] font-semibold">Types</h2>
           <HBars bars={stats.types} color="#A98BD6" />
         </Panel>
 
-        <Panel title="Espansioni" note={`top ${stats.topSets.length} per copie`}>
+        <Panel title="Sets" note={`top ${stats.topSets.length} by copies`}>
           <HBars
             labelWidth={200}
             bars={stats.topSets.map((s) => ({
@@ -157,7 +157,7 @@ export function StatsView({ stats, showPurchase = true, showBinders = false, top
         </Panel>
 
         {showBinders && stats.binders.length > 0 && (
-          <Panel title="Binder" note="copie · valore di mercato">
+          <Panel title="Binder" note="copies · market value">
             <HBars labelWidth={120} bars={stats.binders.map((b) => ({ ...b, extra: fmtEur(stats.binderValue[b.key] ?? 0) }))} />
           </Panel>
         )}
@@ -169,10 +169,10 @@ export function StatsView({ stats, showPurchase = true, showBinders = false, top
                 <thead>
                   <tr className="text-left text-dim">
                     <th className="px-2.5 py-2 font-medium">#</th>
-                    <th className="px-2.5 py-2 font-medium">Carta</th>
+                    <th className="px-2.5 py-2 font-medium">Card</th>
                     <th className="px-2.5 py-2 font-medium">Set</th>
-                    <th className="px-2.5 py-2 text-right font-medium">Copie</th>
-                    <th className="px-2.5 py-2 text-right font-medium">€ mercato</th>
+                    <th className="px-2.5 py-2 text-right font-medium">Copies</th>
+                    <th className="px-2.5 py-2 text-right font-medium">€ market</th>
                   </tr>
                 </thead>
                 <tbody>

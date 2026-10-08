@@ -8,9 +8,9 @@ export function ScopeTabs({ scope, onChange }: { scope: string; onChange: (s: st
   const binders = index?.binders ?? []
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <div role="group" aria-label="Collezione" className="flex flex-wrap rounded-[10px] border border-line bg-[#15171D] p-[3px]">
+      <div role="group" aria-label="Collection" className="flex flex-wrap rounded-[10px] border border-line bg-[#15171D] p-[3px]">
         <button type="button" aria-pressed={scope === 'all'} className={clsx('seg', scope === 'all' && 'seg-on')} onClick={() => onChange('all')}>
-          Tutte le collezioni
+          All collections
         </button>
         {binders.map((b) => (
           <button key={b.name} type="button" aria-pressed={scope === b.name} className={clsx('seg', scope === b.name && 'seg-on')} onClick={() => onChange(b.name)}>
@@ -19,7 +19,7 @@ export function ScopeTabs({ scope, onChange }: { scope: string; onChange: (s: st
           </button>
         ))}
       </div>
-      {scope === 'all' && <span className="text-xs text-dim">Raggruppate per nome · stampe e binder nel dettaglio</span>}
+      {scope === 'all' && <span className="text-xs text-dim">Grouped by name · printings and binders in details</span>}
     </div>
   )
 }

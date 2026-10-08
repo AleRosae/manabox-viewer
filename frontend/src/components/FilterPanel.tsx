@@ -6,12 +6,12 @@ import { EMPTY_FILTERS, type ColorMode, type PanelFilters } from '../lib/filters
 import type { Entry } from '../lib/types'
 
 const COLORS = [
-  { k: 'W', label: 'Bianco', bg: '#F0E6C8', fg: '#3A3320' },
-  { k: 'U', label: 'Blu', bg: '#4A90D9', fg: '#fff' },
-  { k: 'B', label: 'Nero', bg: '#4B4150', fg: '#fff' },
-  { k: 'R', label: 'Rosso', bg: '#C9503A', fg: '#fff' },
-  { k: 'G', label: 'Verde', bg: '#3E8E5E', fg: '#fff' },
-  { k: 'C', label: 'Incolore', bg: '#6B7079', fg: '#fff' },
+  { k: 'W', label: 'White', bg: '#F0E6C8', fg: '#3A3320' },
+  { k: 'U', label: 'Blue', bg: '#4A90D9', fg: '#fff' },
+  { k: 'B', label: 'Black', bg: '#4B4150', fg: '#fff' },
+  { k: 'R', label: 'Red', bg: '#C9503A', fg: '#fff' },
+  { k: 'G', label: 'Green', bg: '#3E8E5E', fg: '#fff' },
+  { k: 'C', label: 'Colorless', bg: '#6B7079', fg: '#fff' },
 ]
 
 const RARITIES = [
@@ -81,14 +81,14 @@ export function FilterPanel({ filters: f, onChange, entries }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <span className="text-[15px] font-semibold">Filtri</span>
+        <span className="text-[15px] font-semibold">Filters</span>
         <button type="button" className="text-xs text-accent hover:text-accent-hi" onClick={() => onChange(EMPTY_FILTERS)}>
-          Azzera
+          Reset
         </button>
       </div>
 
       <section className="flex flex-col gap-2.5">
-        <h3 className="facet">Colore</h3>
+        <h3 className="facet">Color</h3>
         <div className="flex flex-wrap gap-1.5">
           {COLORS.map((c) => {
             const on = f.colors.includes(c.k)
@@ -107,10 +107,10 @@ export function FilterPanel({ filters: f, onChange, entries }: Props) {
             )
           })}
         </div>
-        <div className="flex rounded-[9px] border border-line bg-panel-2 p-[3px]" role="group" aria-label="Modalità colore">
+        <div className="flex rounded-[9px] border border-line bg-panel-2 p-[3px]" role="group" aria-label="Color mode">
           {(['include', 'atmost', 'exact'] as ColorMode[]).map((m) => (
             <button key={m} type="button" className={clsx('seg flex-1 px-2', f.colorMode === m && 'seg-on')} onClick={() => set({ colorMode: m })}>
-              {m === 'include' ? 'Include' : m === 'atmost' ? 'Al più' : 'Esatti'}
+              {m === 'include' ? 'Include' : m === 'atmost' ? 'At most' : 'Exact'}
             </button>
           ))}
         </div>
@@ -125,7 +125,7 @@ export function FilterPanel({ filters: f, onChange, entries }: Props) {
       </section>
 
       <section className="flex flex-col gap-0.5">
-        <h3 className="facet mb-1.5">Tipo</h3>
+        <h3 className="facet mb-1.5">Type</h3>
         {MAIN_TYPES.filter((t) => typeCounts.has(t)).map((t) => (
           <label key={t} className="flex min-h-7 cursor-pointer items-center gap-2 text-[13px] text-soft">
             <input type="checkbox" className="h-[15px] w-[15px] accent-accent" checked={f.types.includes(t)} onChange={() => set({ types: toggle(f.types, t) })} />
@@ -136,7 +136,7 @@ export function FilterPanel({ filters: f, onChange, entries }: Props) {
       </section>
 
       <section className="flex flex-col gap-0.5">
-        <h3 className="facet mb-1.5">Rarità</h3>
+        <h3 className="facet mb-1.5">Rarity</h3>
         {RARITIES.map((r) => (
           <label key={r.k} className="flex min-h-7 cursor-pointer items-center gap-2 text-[13px] text-soft">
             <input type="checkbox" className="h-[15px] w-[15px] accent-accent" checked={f.rarities.includes(r.k)} onChange={() => set({ rarities: toggle(f.rarities, r.k) })} />
@@ -147,12 +147,12 @@ export function FilterPanel({ filters: f, onChange, entries }: Props) {
       </section>
 
       <section className="flex flex-col gap-2.5">
-        <h3 className="facet">Espansione</h3>
+        <h3 className="facet">Set</h3>
         <div className="relative">
           <label className="flex min-h-10 items-center gap-2 rounded-[9px] border border-line bg-panel-2 px-3 text-dim focus-within:border-accent">
             <Search size={14} />
             <input
-              placeholder={`Cerca tra ${sets.length} set…`}
+              placeholder={`Search ${sets.length} set${sets.length === 1 ? '' : 's'}…`}
               className="flex-1 bg-transparent text-[13px] text-fg outline-none"
               value={setQuery}
               onChange={(e) => setSetQuery(e.target.value)}
@@ -182,7 +182,7 @@ export function FilterPanel({ filters: f, onChange, entries }: Props) {
         {f.sets.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {f.sets.map((code) => (
-              <button key={code} type="button" className="flex items-center gap-1 rounded-md bg-chip px-2 py-1 font-mono text-xs hover:bg-line-3" onClick={() => set({ sets: f.sets.filter((s) => s !== code) })} aria-label={`Rimuovi ${code}`}>
+              <button key={code} type="button" className="flex items-center gap-1 rounded-md bg-chip px-2 py-1 font-mono text-xs hover:bg-line-3" onClick={() => set({ sets: f.sets.filter((s) => s !== code) })} aria-label={`Remove ${code}`}>
                 {code.toUpperCase()} <X size={12} />
               </button>
             ))}
@@ -191,7 +191,7 @@ export function FilterPanel({ filters: f, onChange, entries }: Props) {
       </section>
 
       <section className="flex flex-col gap-2.5">
-        <h3 className="facet">Prezzo di mercato (€)</h3>
+        <h3 className="facet">Market price (€)</h3>
         <div className="grid grid-cols-2 gap-2">
           <NumberField label="min €" value={f.priceMin} step={0.5} onChange={(v) => set({ priceMin: v })} />
           <NumberField label="max €" value={f.priceMax} step={0.5} onChange={(v) => set({ priceMax: v })} />
@@ -199,14 +199,14 @@ export function FilterPanel({ filters: f, onChange, entries }: Props) {
       </section>
 
       <section className="flex flex-col gap-0.5">
-        <h3 className="facet mb-1.5">Finitura e forma</h3>
+        <h3 className="facet mb-1.5">Finish & layout</h3>
         <label className="flex min-h-7 cursor-pointer items-center gap-2 text-[13px] text-soft">
           <input type="checkbox" className="h-[15px] w-[15px] accent-accent" checked={f.foilOnly} onChange={() => set({ foilOnly: !f.foilOnly })} />
-          Solo foil / etched
+          Foil / etched only
         </label>
         <label className="flex min-h-7 cursor-pointer items-center gap-2 text-[13px] text-soft">
           <input type="checkbox" className="h-[15px] w-[15px] accent-accent" checked={f.dfcOnly} onChange={() => set({ dfcOnly: !f.dfcOnly })} />
-          Solo bifronte
+          Double-faced only
         </label>
       </section>
     </div>

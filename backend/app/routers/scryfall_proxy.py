@@ -29,7 +29,7 @@ def named(name: str = Query(..., min_length=1), conn: sqlite3.Connection = Depen
     except ScryfallError as exc:
         raise HTTPException(502, str(exc)) from exc
     if card is None:
-        raise HTTPException(404, "Carta non trovata")
+        raise HTTPException(404, "Card not found")
     upsert_cards(conn, [card])
     return slim(card)
 

@@ -38,7 +38,7 @@ class ScryfallClient:
                 time.sleep(1 + attempt * 2)
                 continue
             return resp
-        raise ScryfallError("Scryfall rate limit: troppi tentativi")
+        raise ScryfallError("Scryfall rate limit: too many retries")
 
     def collection(self, identifiers: list[dict]) -> tuple[list[dict], list[dict]]:
         """POST /cards/collection with at most 75 identifiers."""
@@ -56,8 +56,9 @@ class ScryfallClient:
             raise ScryfallError(f"/cards/{scryfall_id} HTTP {resp.status_code}")
         return resp.json()
 
-    def named(self, exact: str) -> dict | None:
-        resp = self._request("GET", "/cards/named", params={"exact": exact})
+    def named(self, exact: str | None = None, *, fuzzy: str | None = None) -> dict | None:
+        params = {"exact": exact} if exact is not None else {"fuzzy": fuzzy}
+        resp = self._request("GET", "/cards/named", params=params)
         if resp.status_code == 404:
             return None
         if resp.status_code != 200:
@@ -83,7 +84,7 @@ class ScryfallClient:
         # Image CDN (cards.scryfall.io) is not rate limited like the API, but we stay polite.
         resp = self.http.get(url, follow_redirects=True)
         if resp.status_code != 200:
-            raise ScryfallError(f"Immagine HTTP {resp.status_code}")
+            raise ScryfallError(f"Image HTTP {resp.status_code}")
         return resp.content
 
 

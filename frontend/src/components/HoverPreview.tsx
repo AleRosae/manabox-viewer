@@ -56,7 +56,7 @@ export function HoverPreview() {
           />
           {dimmed && (
             <span className="absolute left-1/2 top-[46%] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line-3 bg-bg px-3 py-2 text-xs font-semibold tracking-[0.06em] whitespace-nowrap">
-              NON POSSEDUTA
+              NOT OWNED
             </span>
           )}
         </div>

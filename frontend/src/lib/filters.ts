@@ -85,15 +85,15 @@ export type SortKey = 'name' | 'mv' | 'price' | 'value' | 'rarity' | 'set' | 'ad
 export type SortDir = 'asc' | 'desc'
 
 export const SORT_LABELS: Record<SortKey, string> = {
-  price: 'Prezzo',
-  value: 'Valore totale',
-  name: 'Nome',
+  price: 'Price',
+  value: 'Total value',
+  name: 'Name',
   mv: 'Mana value',
-  color: 'Colore',
-  rarity: 'Rarità',
-  set: 'Espansione',
-  qty: 'Copie',
-  added: 'Data aggiunta',
+  color: 'Color',
+  rarity: 'Rarity',
+  set: 'Set',
+  qty: 'Copies',
+  added: 'Date added',
 }
 
 const colorRank = (colors: string[]) => {

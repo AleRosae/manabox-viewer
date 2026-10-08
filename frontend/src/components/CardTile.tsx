@@ -49,7 +49,7 @@ export const CardTile = memo(function CardTile({ entry, index, selected, selecti
             type="checkbox"
             className="peer sr-only"
             checked={selected}
-            aria-label={`Seleziona ${entry.card.name}`}
+            aria-label={`Select ${entry.card.name}`}
             onChange={(e) => onSelect(entry.key, index, (e.nativeEvent as MouseEvent).shiftKey)}
           />
           <span
@@ -77,7 +77,7 @@ export const CardTile = memo(function CardTile({ entry, index, selected, selecti
         {dfc && (
           <button
             type="button"
-            aria-label="Gira la carta"
+            aria-label="Flip card"
             className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-bg/85 text-fg hover:bg-chip"
             onClick={(e) => {
               e.stopPropagation()
@@ -95,7 +95,7 @@ export const CardTile = memo(function CardTile({ entry, index, selected, selecti
               className="absolute inset-x-2 bottom-2 flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-accent text-xs font-semibold text-accent-ink opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
               onClick={(e) => e.stopPropagation()}
             >
-              <Plus size={14} strokeWidth={2.5} /> Aggiungi a lista
+              <Plus size={14} strokeWidth={2.5} /> Add to list
             </button>
           </AddToListPopover>
         )}
@@ -104,7 +104,7 @@ export const CardTile = memo(function CardTile({ entry, index, selected, selecti
       <div className="flex items-baseline justify-between gap-1.5 px-0.5">
         <span className="truncate font-mono text-[11px] text-dim" title={entry.binders.join(', ')}>
           {showBinders
-            ? `${entry.binders.length > 1 ? `${entry.binders.length} binder` : entry.binders[0]}`
+            ? `${entry.binders.length > 1 ? `${entry.binders.length} binders` : entry.binders[0]}`
             : `${entry.card.set.toUpperCase()} · ${rarity}`}
         </span>
         <span className="font-mono text-[13px] font-medium">{fmtEur(entry.unitMarket)}</span>

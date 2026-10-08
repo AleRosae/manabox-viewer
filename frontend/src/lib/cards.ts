@@ -33,14 +33,14 @@ export function colorBucket(card: Card): string {
 }
 
 export const BUCKET_LABEL: Record<string, string> = {
-  W: 'Bianco',
-  U: 'Blu',
-  B: 'Nero',
-  R: 'Rosso',
-  G: 'Verde',
-  M: 'Multicolore',
-  C: 'Incolore',
-  L: 'Terre',
+  W: 'White',
+  U: 'Blue',
+  B: 'Black',
+  R: 'Red',
+  G: 'Green',
+  M: 'Multicolor',
+  C: 'Colorless',
+  L: 'Lands',
 }
 
 export const BUCKET_COLOR: Record<string, string> = {
@@ -195,11 +195,11 @@ export function indexCollection(rows: Row[], cards: Record<string, Card>, usdToE
 
 // --- formatting --------------------------------------------------------------------------------
 
-// Italian locale skips the separator for 4-digit numbers unless grouping is forced.
-const eur = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', useGrouping: 'always' })
-const num = new Intl.NumberFormat('it-IT', { useGrouping: 'always' })
+// Always group digits, so 4-digit numbers get a thousands separator in every locale.
+const eur = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR', useGrouping: 'always' })
+const num = new Intl.NumberFormat('en-GB', { useGrouping: 'always' })
 
 export const fmtEur = (v: number | null | undefined) => (v == null ? '—' : eur.format(v))
 export const fmtNum = (v: number) => num.format(v)
 export const fmtDate = (iso: string | null | undefined) =>
-  iso ? new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+  iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'

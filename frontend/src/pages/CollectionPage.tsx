@@ -125,13 +125,13 @@ export function CollectionPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-muted">
             <span className="font-semibold text-fg">
-              {fmtNum(visible.length)} {scope === 'all' ? 'carte uniche' : 'carte'}
+              {fmtNum(visible.length)} {scope === 'all' ? 'unique ' : ''}card{visible.length === 1 ? '' : 's'}
             </span>{' '}
-            · {fmtNum(totals.copies)} copie · <span className="font-mono">{fmtEur(totals.value)}</span> mercato
+            · {fmtNum(totals.copies)} {totals.copies === 1 ? 'copy' : 'copies'} · <span className="font-mono">{fmtEur(totals.value)}</span> market
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <button type="button" className="btn lg:hidden" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters}>
-              <SlidersHorizontal size={15} /> Filtri{filterCount > 0 && ` (${filterCount})`}
+              <SlidersHorizontal size={15} /> Filters{filterCount > 0 && ` (${filterCount})`}
             </button>
             <button
               type="button"
@@ -139,10 +139,10 @@ export function CollectionPage() {
               className={clsx('btn', selectionMode && 'border-accent bg-warn-bg text-warn-fg hover:bg-warn-bg')}
               onClick={() => setMode(!selectionMode)}
             >
-              <CheckSquare size={15} /> Selezione
+              <CheckSquare size={15} /> Selection
             </button>
             <label className="flex items-center gap-2 text-[13px] text-muted">
-              Ordina
+              Sort
               <select className="field" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
                 {Object.entries(SORT_LABELS).map(([k, label]) => (
                   <option key={k} value={k}>
@@ -151,14 +151,14 @@ export function CollectionPage() {
                 ))}
               </select>
             </label>
-            <button type="button" className="btn btn-icon" aria-label={dir === 'asc' ? 'Crescente' : 'Decrescente'} onClick={() => update({ dir: dir === 'asc' ? 'desc' : 'asc' })}>
+            <button type="button" className="btn btn-icon" aria-label={dir === 'asc' ? 'Ascending' : 'Descending'} onClick={() => update({ dir: dir === 'asc' ? 'desc' : 'asc' })}>
               {dir === 'asc' ? '↑' : '↓'}
             </button>
-            <div role="group" aria-label="Vista" className="flex rounded-[9px] border border-line bg-[#15171D] p-[3px]">
-              <button type="button" aria-label="Griglia" aria-pressed={view === 'grid'} className={clsx('seg px-2.5', view === 'grid' && 'seg-on')} onClick={() => update({ view: null })}>
+            <div role="group" aria-label="View" className="flex rounded-[9px] border border-line bg-[#15171D] p-[3px]">
+              <button type="button" aria-label="Grid" aria-pressed={view === 'grid'} className={clsx('seg px-2.5', view === 'grid' && 'seg-on')} onClick={() => update({ view: null })}>
                 <LayoutGrid size={16} />
               </button>
-              <button type="button" aria-label="Tabella" aria-pressed={view === 'table'} className={clsx('seg px-2.5', view === 'table' && 'seg-on')} onClick={() => update({ view: 'table' })}>
+              <button type="button" aria-label="Table" aria-pressed={view === 'table'} className={clsx('seg px-2.5', view === 'table' && 'seg-on')} onClick={() => update({ view: 'table' })}>
                 <ListIcon size={16} />
               </button>
             </div>
@@ -167,8 +167,8 @@ export function CollectionPage() {
 
         {visible.length === 0 ? (
           <div className="panel flex flex-col items-center gap-2 px-6 py-16 text-center">
-            <span className="text-base font-semibold">Nessuna carta corrisponde</span>
-            <span className="text-sm text-muted">Prova a togliere qualche filtro o a cambiare la ricerca.</span>
+            <span className="text-base font-semibold">No matching cards</span>
+            <span className="text-sm text-muted">Try removing some filters or changing the search.</span>
           </div>
         ) : view === 'grid' ? (
           <CollectionGrid entries={visible} selected={selected} selectionMode={selectionMode} showBinders={scope === 'all'} onSelect={onSelect} onOpen={open} />

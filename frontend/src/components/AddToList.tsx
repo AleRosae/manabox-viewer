@@ -23,7 +23,7 @@ export function ListPicker({
   return (
     <div className={className}>
       <select
-        aria-label="Lista di destinazione"
+        aria-label="Target list"
         className="field w-full"
         value={value}
         onChange={(e) => onChange(e.target.value === 'new' ? 'new' : Number(e.target.value))}
@@ -33,13 +33,13 @@ export function ListPicker({
             {l.name}
           </option>
         ))}
-        <option value="new">+ Nuova lista…</option>
+        <option value="new">+ New list…</option>
       </select>
       {value === 'new' && (
         <input
           autoFocus
-          aria-label="Nome della nuova lista"
-          placeholder="Nome della nuova lista"
+          aria-label="New list name"
+          placeholder="New list name"
           className="field mt-2 w-full"
           value={newName}
           onChange={(e) => onNewName(e.target.value)}
@@ -70,12 +70,12 @@ export function availability(listId: number | 'new', owned: number, usage: Recor
 }
 
 export function AvailabilityText({ owned, inThis, elsewhere, available }: { owned: number; inThis: number; elsewhere: number; available: number }) {
-  if (owned === 0) return <span className="text-xs text-dim">Non posseduta: verrà segnata come tale nella lista</span>
+  if (owned === 0) return <span className="text-xs text-dim">Not owned: it will be marked as such in the list</span>
   return (
     <span className="text-xs text-[#C9B48A]">
-      {available} disponibil{available === 1 ? 'e' : 'i'} su {owned} possedut{owned === 1 ? 'a' : 'e'}
-      {inThis > 0 && ` · già ${inThis} in questa lista`}
-      {elsewhere > 0 && ` · ${elsewhere} in altre liste`}
+      {available} of {owned} owned available
+      {inThis > 0 && ` · ${inThis} already in this list`}
+      {elsewhere > 0 && ` · ${elsewhere} in other lists`}
     </span>
   )
 }
@@ -118,7 +118,7 @@ export function AddToListForm({ card, onDone }: { card: Card; onDone?: () => voi
         <ListPicker className="min-w-44 flex-1" value={listId} onChange={setListId} newName={newName} onNewName={setNewName} />
         <QtyStepper value={qty} onChange={setQty} min={1} />
         <button type="submit" className="btn btn-primary" disabled={busy || (listId === 'new' && !newName.trim())}>
-          Aggiungi
+          Add
         </button>
       </div>
       <AvailabilityText owned={owned} {...avail} />
@@ -141,7 +141,7 @@ export function AddToListPopover({ card, children }: { card: Card; children: Rea
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-3 text-[15px] font-semibold">
-            Aggiungi <span className="text-accent">{card.name}</span>
+            Add <span className="text-accent">{card.name}</span>
           </div>
           <AddToListForm card={card} onDone={() => setOpen(false)} />
         </Popover.Content>
