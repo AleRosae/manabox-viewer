@@ -510,6 +510,7 @@ export function ListDetailView({ listId }: { listId: number }) {
       ) : tab === 'compare' && comparable ? (
         <ListCompareView
           items={compareItems}
+          listName={list.name}
           sharedBy={list.cubecobra_id ? 'CubeCobra' : list.shared_by}
           note={list.cubecobra_id ? 'owned, proxied or borrowed, as of the last sync' : 'ownership as of their export'}
           onOpen={(it) => setDetailId(it.scryfall_id)}

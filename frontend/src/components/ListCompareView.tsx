@@ -1,12 +1,26 @@
 import clsx from 'clsx'
+import { Copy, Download } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { fmtEur, marketPrice } from '../lib/cards'
-import { COMPARE_LABEL, COMPARE_ORDER, compareBucket, compareSummary, missingMine, missingTheirs, type CompareBucket } from '../lib/compare'
+import {
+  COMPARE_LABEL,
+  COMPARE_ORDER,
+  compareBucket,
+  compareExportText,
+  compareSummary,
+  inFilter,
+  missingMine,
+  missingTheirs,
+  type CompareFilter,
+} from '../lib/compare'
 import type { ListItem } from '../lib/types'
 import { useUsdRate } from '../store/data'
 import { useHoverPreview } from './HoverPreview'
 
-type Filter = 'all' | 'you_miss' | 'they_miss' | CompareBucket
+type Filter = CompareFilter
+
+const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'list'
 
 function Count({ have, of }: { have: number | null; of: number }) {
   if (have == null) return <span className="text-dim">?</span>
@@ -39,11 +53,13 @@ function CompareRow({ item, price, them, onOpen }: { item: ListItem; price: numb
  */
 export function ListCompareView({
   items,
+  listName,
   sharedBy,
   note,
   onOpen,
 }: {
   items: ListItem[]
+  listName: string
   sharedBy: string | null
   /** what "their" ownership means, under their counts */
   note: string
@@ -56,9 +72,7 @@ export function ListCompareView({
   const summary = useMemo(() => compareSummary(items, (i) => marketPrice(i.card, 'normal', rate) ?? 0), [items, rate])
 
   const shown = useMemo(() => {
-    const keep = (i: ListItem) =>
-      filter === 'all' ? true : filter === 'you_miss' ? missingMine(i) > 0 : filter === 'they_miss' ? missingTheirs(i) > 0 : compareBucket(i) === filter
-    return items.filter(keep).sort((a, b) => a.card.name.localeCompare(b.card.name))
+    return items.filter((i) => inFilter(i, filter)).sort((a, b) => a.card.name.localeCompare(b.card.name))
   }, [items, filter])
 
   const chips: [Filter, string, number][] = [
@@ -67,6 +81,24 @@ export function ListCompareView({
     ['they_miss', `${them} ${sharedBy ? 'is' : 'are'} missing`, items.filter((i) => missingTheirs(i) > 0).length],
     ...COMPARE_ORDER.map((b): [Filter, string, number] => [b, b === 'only_them' ? `Only ${sharedBy || 'them'}` : COMPARE_LABEL[b], summary.counts[b]]),
   ]
+
+  const exportText = () => compareExportText(items, filter)
+  const copyList = async () => {
+    try {
+      await navigator.clipboard.writeText(exportText())
+      toast.success(`Copied ${shown.length} cards`)
+    } catch {
+      toast.error('Could not copy to the clipboard')
+    }
+  }
+  const downloadList = () => {
+    const url = URL.createObjectURL(new Blob([exportText()], { type: 'text/plain' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${slugify(listName)}_${filter}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -93,12 +125,22 @@ export function ListCompareView({
         </div>
       </div>
 
-      <div role="group" aria-label="Filter comparison" className="flex flex-wrap gap-1.5">
-        {chips.map(([k, label, n]) => (
-          <button key={k} type="button" aria-pressed={filter === k} className={clsx('min-h-[34px] rounded-full border px-3 text-[12.5px] font-medium', filter === k ? 'border-[#3A3F4B] bg-chip text-fg' : 'border-line-2 text-muted hover:text-fg')} onClick={() => setFilter(k)}>
-            {label} {n}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div role="group" aria-label="Filter comparison" className="flex flex-wrap gap-1.5">
+          {chips.map(([k, label, n]) => (
+            <button key={k} type="button" aria-pressed={filter === k} className={clsx('min-h-[34px] rounded-full border px-3 text-[12.5px] font-medium', filter === k ? 'border-[#3A3F4B] bg-chip text-fg' : 'border-line-2 text-muted hover:text-fg')} onClick={() => setFilter(k)}>
+              {label} {n}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button type="button" className="btn" disabled={shown.length === 0} onClick={copyList} title="Copy these cards as “1 Name (SET) 123” lines; missing filters list only the missing copies">
+            <Copy size={15} /> Copy
           </button>
-        ))}
+          <button type="button" className="btn" disabled={shown.length === 0} onClick={downloadList} title="Download these cards as a .txt list; missing filters list only the missing copies">
+            <Download size={15} /> .txt
+          </button>
+        </div>
       </div>
 
       {shown.length === 0 ? (

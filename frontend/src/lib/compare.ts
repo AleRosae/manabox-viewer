@@ -49,3 +49,30 @@ export function compareSummary<T extends Comparable>(items: T[], unitPrice: (i: 
   }
   return { counts, youMiss, theyMiss, youMissValue, theyMissValue }
 }
+
+export type CompareFilter = 'all' | 'you_miss' | 'they_miss' | CompareBucket
+
+export function inFilter(i: Comparable, filter: CompareFilter) {
+  if (filter === 'all') return true
+  if (filter === 'you_miss') return missingMine(i) > 0
+  if (filter === 'they_miss') return missingTheirs(i) > 0
+  return compareBucket(i) === filter
+}
+
+/** Copies a filter is about: the missing ones for "missing" filters, the whole quantity otherwise. */
+export function filterCopies(i: Comparable, filter: CompareFilter) {
+  return filter === 'you_miss' ? missingMine(i) : filter === 'they_miss' ? missingTheirs(i) : i.quantity
+}
+
+interface Printable extends Comparable {
+  card: { name: string; set: string; collector_number: string }
+}
+
+/** '1 Name (SET) 123' lines of the cards in a filter, like the backend's plain text export. */
+export function compareExportText(items: Printable[], filter: CompareFilter) {
+  const lines = items
+    .filter((i) => inFilter(i, filter))
+    .sort((a, b) => a.card.name.localeCompare(b.card.name))
+    .map((i) => `${filterCopies(i, filter)} ${i.card.name} (${i.card.set.toUpperCase()}) ${i.card.collector_number}`)
+  return lines.length ? lines.join('\n') + '\n' : ''
+}

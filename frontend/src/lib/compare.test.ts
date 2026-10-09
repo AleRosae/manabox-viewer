@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compareBucket, compareSummary, hasComparison } from './compare'
+import { compareBucket, compareExportText, compareSummary, hasComparison } from './compare'
 
 const item = (quantity: number, owned: number, their_owned: number | null) => ({ quantity, owned, their_owned })
 
@@ -31,5 +31,25 @@ describe('compareSummary', () => {
   it('detects lists without the sharer ownership', () => {
     expect(hasComparison([item(1, 1, null)])).toBe(false)
     expect(hasComparison([item(1, 1, null), item(1, 0, 0)])).toBe(true)
+  })
+})
+
+describe('compareExportText', () => {
+  const card = (name: string) => ({ name, set: 'tst', collector_number: '7' })
+  const items = [
+    { ...item(2, 1, 0), card: card('Zombie') },
+    { ...item(1, 1, 0), card: card('Angel') },
+    { ...item(3, 3, 3), card: card('Bear') },
+  ]
+
+  it('lists the missing copies for the missing filters', () => {
+    expect(compareExportText(items, 'you_miss')).toBe('1 Zombie (TST) 7\n')
+    expect(compareExportText(items, 'they_miss')).toBe('1 Angel (TST) 7\n2 Zombie (TST) 7\n')
+  })
+
+  it('lists the whole quantity for the buckets', () => {
+    expect(compareExportText(items, 'neither')).toBe('2 Zombie (TST) 7\n')
+    expect(compareExportText(items, 'only_me')).toBe('1 Angel (TST) 7\n')
+    expect(compareExportText(items, 'only_them')).toBe('')
   })
 })
