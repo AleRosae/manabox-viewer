@@ -42,6 +42,9 @@ class FakeScryfall:
     def __init__(self):
         self.cards: dict[str, dict] = {}
         self.calls: list[str] = []
+        # Outages: the next requests answer these (a status code or an exception), then `down` forever.
+        self.failures: list[int | Exception] = []
+        self.down: int | Exception | None = None
 
     def add(self, card: dict) -> dict:
         self.cards[card["id"]] = card
@@ -49,6 +52,11 @@ class FakeScryfall:
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.calls.append(f"{request.method} {request.url.path}")
+        failure = self.failures.pop(0) if self.failures else self.down
+        if isinstance(failure, Exception):
+            raise failure
+        if failure is not None:
+            return httpx.Response(failure, text="Scryfall is down")
         path = request.url.path
         if path == "/cards/collection":
             data, missing = [], []
@@ -88,7 +96,7 @@ def fake_scryfall(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "IMAGES_DIR", tmp_path / "images")
     fake = FakeScryfall()
     http = httpx.Client(base_url="https://api.scryfall.test", transport=httpx.MockTransport(fake.handler))
-    scryfall.set_client(ScryfallClient(http=http, delay=0))
+    scryfall.set_client(ScryfallClient(http=http, delay=0, backoff=0))
     db.init_db()
     yield fake
     scryfall.set_client(None)

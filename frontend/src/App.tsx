@@ -48,6 +48,11 @@ function Header() {
         </nav>
       )}
       <span className="flex-1" />
+      {!!status?.pending_cards && (
+        <Link to="/import" className="text-xs text-accent hover:underline" title="Scryfall did not answer during the import: retry from the import page">
+          {status.pending_cards} {status.pending_cards === 1 ? 'card' : 'cards'} not loaded
+        </Link>
+      )}
       {current && (
         <span className="hidden text-xs text-dim md:inline">
           Export {fmtDate(current.imported_at)} · prices {fmtDate(status?.prices.updated_at ?? current.imported_at)}

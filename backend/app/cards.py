@@ -1,11 +1,14 @@
 """Scryfall card cache: storage, slim projection and batch enrichment."""
 
 import json
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from typing import Callable, Iterable
 
-from .scryfall import BATCH_SIZE, ScryfallClient
+from .scryfall import BATCH_SIZE, ScryfallClient, ScryfallError
+
+log = logging.getLogger(__name__)
 
 
 def now_iso() -> str:
@@ -127,14 +130,26 @@ def fetch_by_identifiers(
     client: ScryfallClient,
     identifiers: list[dict],
     progress: Callable[[int, int], None] | None = None,
+    failed: list[dict] | None = None,
 ) -> tuple[list[dict], list[dict]]:
-    """Fetch cards in batches of 75, store them and return (found, not_found)."""
+    """Fetch cards in batches of 75, store them and return (found, not_found).
+
+    With `failed`, a batch Scryfall does not answer (after the client's retries) is skipped and its
+    identifiers collected there; otherwise the ScryfallError propagates.
+    """
     found_all: list[dict] = []
     missing_all: list[dict] = []
     total = len(identifiers)
     for i in range(0, total, BATCH_SIZE):
         batch = identifiers[i : i + BATCH_SIZE]
-        found, missing = client.collection(batch)
+        try:
+            found, missing = client.collection(batch)
+        except ScryfallError:
+            if failed is None:
+                raise
+            log.warning("Skipping %d cards: Scryfall did not answer", len(batch), exc_info=True)
+            failed.extend(batch)
+            found, missing = [], []
         upsert_cards(conn, found)
         conn.commit()
         found_all.extend(found)

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { CheckCircle2, FileUp, RefreshCw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileUp, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -82,12 +82,13 @@ export function ImportPage() {
         const info = await api.getImport(id)
         setJob(info)
         if (info.status !== 'enriching') {
-          await loadStatus()
+          const s = await loadStatus()
           if (info.status === 'ready') {
             await loadCollection()
             await listsChanged()
             setDiff(await api.importDiff(id))
             toast.success(`Import complete: ${fmtNum(info.total_quantity)} ${info.total_quantity === 1 ? 'copy' : 'copies'}`)
+            if (s.pending_cards > 0) toast.warning(`Scryfall did not answer for ${fmtNum(s.pending_cards)} cards: retry below`)
           }
           return
         }
@@ -119,6 +120,25 @@ export function ImportPage() {
 
   const running = job?.status === 'enriching' || uploading
   const prices = status?.prices
+  const pending = status?.pending_cards ?? 0
+  const retrying = status?.retry.status === 'running'
+
+  const retryPending = async () => {
+    try {
+      await api.retryPendingCards()
+      let s = await loadStatus()
+      while (s.retry.status === 'running') {
+        await new Promise((r) => setTimeout(r, 1000))
+        s = await loadStatus()
+      }
+      await loadCollection()
+      await listsChanged()
+      if (s.pending_cards > 0) toast.warning(s.retry.error ?? `Scryfall still did not answer for ${fmtNum(s.pending_cards)} cards`)
+      else toast.success('All cards loaded')
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
 
   const refreshPrices = async () => {
     try {
@@ -220,10 +240,21 @@ export function ImportPage() {
             </span>
             <span className="text-xs text-dim">
               Prices updated {fmtDate(prices?.updated_at ?? current.imported_at)}
-              {prices?.status === 'error' && ` · last update failed: ${prices.error}`}
+              {prices?.error && (prices.status === 'error' ? ` · last update failed: ${prices.error}` : ` · ${prices.error}`)}
             </span>
+            {pending > 0 && (
+              <span className="flex items-center gap-1.5 text-xs text-accent">
+                <AlertTriangle size={13} /> {fmtNum(pending)} {pending === 1 ? 'card is' : 'cards are'} not shown yet: Scryfall did not answer during the import
+              </span>
+            )}
           </div>
-          <button type="button" className="btn ml-auto" disabled={prices?.status === 'running'} onClick={() => void refreshPrices()}>
+          {pending > 0 && (
+            <button type="button" className="btn ml-auto" disabled={retrying} onClick={() => void retryPending()}>
+              <RefreshCw size={15} className={retrying ? 'animate-spin' : ''} />
+              {retrying ? 'Retrying…' : 'Retry missing cards'}
+            </button>
+          )}
+          <button type="button" className={clsx('btn', pending === 0 && 'ml-auto')} disabled={prices?.status === 'running'} onClick={() => void refreshPrices()}>
             <RefreshCw size={15} className={prices?.status === 'running' ? 'animate-spin' : ''} />
             {prices?.status === 'running' ? `Updating… ${Math.round(prices.progress * 100)}%` : 'Update prices'}
           </button>

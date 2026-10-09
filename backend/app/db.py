@@ -148,10 +148,6 @@ def init_db() -> None:
     with session() as conn:
         conn.executescript(SCHEMA)
         _add_missing_columns(conn)
-        # An import interrupted by a restart can never finish: mark it as failed.
-        conn.execute(
-            "UPDATE imports SET status = 'error', error = 'Interrupted by a restart' WHERE status = 'enriching'"
-        )
 
 
 def latest_ready_import(conn: sqlite3.Connection):

@@ -21,16 +21,19 @@ router = APIRouter(prefix="/api/lists", tags=["lists"])
 
 # Longer tags are cut to MAX_TAG_LEN by normalize_tags; this only bounds the request size.
 Tag = Annotated[str, StringConstraints(max_length=200)]
+# One line of text: names end up in exported files, where a newline would start a card line.
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120, pattern=r"^[^\x00-\x1f\x7f]+$")]
+MAX_QTY = 999
 
 
 class ListIn(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
+    name: Name
     description: str = ""
     kind: str = Field("generic", pattern="^(cube|generic)$")
 
 
 class ListPatch(BaseModel):
-    name: str | None = Field(None, min_length=1, max_length=120)
+    name: Name | None = None
     description: str | None = None
     kind: str | None = Field(None, pattern="^(cube|generic)$")
     cubecobra_id: str | None = Field(None, max_length=300)  # a cube URL or id; "" unlinks
@@ -38,7 +41,7 @@ class ListPatch(BaseModel):
 
 class BulkItem(BaseModel):
     scryfall_id: str
-    quantity: int  # delta: positive adds copies, negative removes them
+    quantity: int = Field(ge=-MAX_QTY, le=MAX_QTY)  # delta: positive adds copies, negative removes them
 
 
 class BulkIn(BaseModel):
@@ -51,16 +54,16 @@ class ImportPreviewIn(BaseModel):
 
 class ImportItem(BaseModel):
     scryfall_id: str
-    quantity: int = Field(ge=1, le=999)
+    quantity: int = Field(ge=1, le=MAX_QTY)
     their_owned: int | None = Field(None, ge=0)
     tags: list[Tag] = Field([], max_length=100)
-    cube_statuses: list[str] | None = Field(None, max_length=999)
+    cube_statuses: list[str] | None = Field(None, max_length=MAX_QTY)
 
 
 class ImportIn(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
+    name: Name
     kind: str = Field("generic", pattern="^(cube|generic)$")
-    shared_by: str | None = Field(None, max_length=60)
+    shared_by: str | None = Field(None, max_length=60, pattern=r"^[^\x00-\x1f\x7f]*$")
     cubecobra_id: str | None = Field(None, max_length=300)
     items: list[ImportItem] = Field(min_length=1)
 
@@ -75,7 +78,7 @@ class SyncIn(BaseModel):
 
 
 class ItemPatch(BaseModel):
-    quantity: int | None = Field(None, ge=1, le=999)
+    quantity: int | None = Field(None, ge=1, le=MAX_QTY)
     preferred_scryfall_id: str | None = None
     tags: list[Tag] | None = Field(None, max_length=100)
 
@@ -191,7 +194,7 @@ def create_list(body: ListIn, conn: sqlite3.Connection = Depends(db.get_conn)):
     ts = now_iso()
     cur = conn.execute(
         "INSERT INTO lists (name, description, kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-        (body.name.strip(), body.description, body.kind, ts, ts),
+        (body.name, body.description, body.kind, ts, ts),
     )
     return dict(_get_list(conn, cur.lastrowid))
 
@@ -266,7 +269,7 @@ def import_list(body: ImportIn, conn: sqlite3.Connection = Depends(db.get_conn))
     list_id = conn.execute(
         """INSERT INTO lists (name, description, kind, shared_by, cubecobra_id, synced_at, created_at, updated_at)
            VALUES (?, '', ?, ?, ?, ?, ?, ?)""",
-        (body.name.strip(), body.kind, shared_by, cube_id, ts if cube_id else None, ts, ts),
+        (body.name, body.kind, shared_by, cube_id, ts if cube_id else None, ts, ts),
     ).lastrowid
     client = get_client()
     merged: dict[str, dict] = {}
@@ -346,7 +349,7 @@ def bulk_items(list_id: int, body: BulkIn, conn: sqlite3.Connection = Depends(db
             "SELECT id, quantity FROM list_items WHERE list_id = ? AND oracle_id = ?", (list_id, oracle_id)
         ).fetchone()
         before = existing["quantity"] if existing else 0
-        after = max(0, before + item.quantity)
+        after = min(MAX_QTY, max(0, before + item.quantity))
         if after == before:
             continue
         if existing and after == 0:

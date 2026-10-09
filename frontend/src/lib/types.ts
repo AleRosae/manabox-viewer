@@ -88,6 +88,9 @@ export interface Status {
   pending_import: ImportInfo | null
   usd_to_eur: number
   prices: PriceJob
+  /** rows of the collection whose card Scryfall did not send yet (an outage during the import) */
+  pending_cards: number
+  retry: { status: 'idle' | 'running' | 'error'; error: string | null }
 }
 
 export interface CollectionData {

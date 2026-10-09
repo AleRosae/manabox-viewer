@@ -2,6 +2,7 @@
 
 import csv
 import io
+import re
 
 from .cubecobra import REAL, STATUSES
 
@@ -70,7 +71,9 @@ def viewer_list(lst: dict, items: list[dict], exported_on: str) -> str:
 
     Everything after '|' is ignored by tools that only read '1 Name (SET) 123'.
     """
-    lines = [VIEWER_MAGIC, f"# name: {lst['name']}", f"# kind: {lst['kind']}", f"# exported: {exported_on}"]
+    # Names saved before they were validated may hold a newline, which would start a card line.
+    name = re.sub(r"[\x00-\x1f\x7f]+", " ", lst["name"])
+    lines = [VIEWER_MAGIC, f"# name: {name}", f"# kind: {lst['kind']}", f"# exported: {exported_on}"]
     for i in sorted(items, key=lambda i: i["card"]["name"]):
         card = i["card"]
         owned = min(i["owned"], i["quantity"])

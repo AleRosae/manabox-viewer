@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import db
 from ..cards import ensure_card, get_slims, slim
-from ..scryfall import ScryfallError, get_client
+from ..scryfall import UUID_RE, ScryfallError, get_client
 
 router = APIRouter(prefix="/api", tags=["collection"])
 
@@ -31,6 +31,8 @@ def collection(conn: sqlite3.Connection = Depends(db.get_conn)):
 
 @router.get("/cards/{scryfall_id}")
 def card(scryfall_id: str, conn: sqlite3.Connection = Depends(db.get_conn)):
+    if not UUID_RE.match(scryfall_id):
+        raise HTTPException(404, "Card not found")
     try:
         data = ensure_card(conn, get_client(), scryfall_id)
     except ScryfallError as exc:

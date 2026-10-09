@@ -25,22 +25,25 @@ def status(conn: sqlite3.Connection = Depends(db.get_conn)):
         "pending_import": _import_dict(pending),
         "usd_to_eur": config.USD_TO_EUR,
         "prices": importer.price_job,
+        # cards Scryfall did not answer for during the import, and the job fetching them again
+        "pending_cards": importer.pending_cards(conn),
+        "retry": importer.retry_job,
     }
 
 
 @router.post("/imports", status_code=201)
 async def upload(file: UploadFile, conn: sqlite3.Connection = Depends(db.get_conn)):
-    running = conn.execute("SELECT id FROM imports WHERE status = 'enriching'").fetchone()
-    if running:
-        raise HTTPException(409, "An import is already running")
-    content = await file.read()
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     try:
         rows = parse_manabox_csv(content)
     except CsvFormatError as exc:
         raise HTTPException(422, str(exc)) from exc
-    import_id = importer.create_import(conn, file.filename or "export.csv", rows)
+    try:
+        import_id = importer.create_import(conn, file.filename or "export.csv", rows)
+    except importer.ImportRunning as exc:
+        raise HTTPException(409, str(exc)) from exc
     importer.start_enrichment(import_id)
     return {"id": import_id}
 
@@ -59,6 +62,14 @@ def get_diff(import_id: int, conn: sqlite3.Connection = Depends(db.get_conn)):
     if not row:
         return None
     return {"previous_import_id": row["previous_import_id"], **json.loads(row["diff_json"])}
+
+
+@router.post("/imports/retry", status_code=202)
+def retry_pending():
+    """Fetch again the cards Scryfall did not answer for during the import."""
+    if not importer.start_retry():
+        raise HTTPException(409, "Already retrying")
+    return importer.retry_job
 
 
 @router.post("/prices/refresh", status_code=202)

@@ -48,6 +48,7 @@ export const api = {
   getImport: (id: number) => request<ImportInfo>(`/api/imports/${id}`),
   importDiff: (id: number) => request<ImportDiff | null>(`/api/imports/${id}/diff`),
   refreshPrices: () => request<unknown>('/api/prices/refresh', { method: 'POST' }),
+  retryPendingCards: () => request<unknown>('/api/imports/retry', { method: 'POST' }),
 
   lists: () => request<ListSummary[]>('/api/lists'),
   usage: () => request<Usage>('/api/lists/usage'),

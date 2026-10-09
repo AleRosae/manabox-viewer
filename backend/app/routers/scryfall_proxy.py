@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import db
 from ..cards import slim, upsert_cards
-from ..scryfall import ScryfallError, get_client
+from ..scryfall import UUID_RE, ScryfallError, get_client
 
 router = APIRouter(prefix="/api/scryfall", tags=["scryfall"])
 
@@ -17,7 +17,10 @@ def autocomplete(q: str = Query(..., min_length=2, max_length=100)):
     if key not in _autocomplete_cache:
         if len(_autocomplete_cache) > 2000:
             _autocomplete_cache.clear()
-        _autocomplete_cache[key] = get_client().autocomplete(key)
+        try:
+            _autocomplete_cache[key] = get_client().autocomplete(key)
+        except ScryfallError:
+            return []  # no suggestions this time; not cached, the next keystroke asks again
     return _autocomplete_cache[key]
 
 
@@ -37,6 +40,8 @@ def named(name: str = Query(..., min_length=1), conn: sqlite3.Connection = Depen
 @router.get("/prints/{oracle_id}")
 def prints(oracle_id: str, conn: sqlite3.Connection = Depends(db.get_conn)):
     """All printings of a card, to choose the preferred one in a list."""
+    if not UUID_RE.match(oracle_id):
+        raise HTTPException(404, "Card not found")
     cards = get_client().prints(oracle_id)
     upsert_cards(conn, cards)
     return [slim(c) for c in cards]

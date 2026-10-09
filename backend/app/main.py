@@ -1,13 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cards, config, db
+from . import cards, config, db, importer
 from .routers import collection, images, imports, lists, scryfall_proxy
+from .scryfall import ScryfallError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -17,11 +18,18 @@ async def lifespan(_app: FastAPI):
     db.init_db()
     with db.session() as conn:
         cards.rebuild_slims_if_needed(conn)
+    importer.resume_after_restart()
     yield
 
 
 app = FastAPI(title="ManaBox Viewer", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=2048)
+
+
+@app.exception_handler(ScryfallError)
+def scryfall_unavailable(_request: Request, exc: ScryfallError):
+    # Scryfall down or unreachable even after retries: a gateway error, not a bug of ours.
+    return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
 for module in (imports, collection, images, lists, scryfall_proxy):

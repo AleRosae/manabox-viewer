@@ -9,6 +9,7 @@ import {
   compareBucket,
   compareExportText,
   compareSummary,
+  filterCopies,
   inFilter,
   missingMine,
   missingTheirs,
@@ -19,6 +20,23 @@ import { useUsdRate } from '../store/data'
 import { useHoverPreview } from './HoverPreview'
 
 type Filter = CompareFilter
+
+/** The Clipboard API exists only on HTTPS and localhost: over plain HTTP on the LAN fall back to a selection copy. */
+async function copyText(text: string) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text)
+  const area = document.createElement('textarea')
+  area.value = text
+  area.setAttribute('readonly', '')
+  area.style.position = 'fixed'
+  area.style.opacity = '0'
+  document.body.appendChild(area)
+  area.select()
+  try {
+    if (!document.execCommand('copy')) throw new Error('copy refused')
+  } finally {
+    area.remove()
+  }
+}
 
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'list'
 
@@ -85,8 +103,9 @@ export function ListCompareView({
   const exportText = () => compareExportText(items, filter)
   const copyList = async () => {
     try {
-      await navigator.clipboard.writeText(exportText())
-      toast.success(`Copied ${shown.length} cards`)
+      await copyText(exportText())
+      const copies = shown.reduce((n, i) => n + filterCopies(i, filter), 0)
+      toast.success(`Copied ${copies} ${copies === 1 ? 'copy' : 'copies'} (${shown.length} ${shown.length === 1 ? 'card' : 'cards'})`)
     } catch {
       toast.error('Could not copy to the clipboard')
     }
@@ -96,8 +115,11 @@ export function ListCompareView({
     const a = document.createElement('a')
     a.href = url
     a.download = `${slugify(listName)}_${filter}.txt`
+    document.body.appendChild(a)
     a.click()
-    URL.revokeObjectURL(url)
+    a.remove()
+    // Revoking right away can cancel the download in some browsers.
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   return (

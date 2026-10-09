@@ -1,5 +1,7 @@
-"""Minimal, polite Scryfall client (rate limited, retries on 429)."""
+"""Minimal, polite Scryfall client (rate limited, retries on 429, 5xx and network errors)."""
 
+import logging
+import re
 import threading
 import time
 
@@ -7,7 +9,13 @@ import httpx
 
 from . import config
 
+log = logging.getLogger(__name__)
+
 BATCH_SIZE = 75
+# Transient answers worth retrying: rate limit, server errors, maintenance.
+RETRY_STATUSES = {429, 500, 502, 503, 504}
+MAX_RETRY_AFTER = 60.0
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 class ScryfallError(RuntimeError):
@@ -15,30 +23,55 @@ class ScryfallError(RuntimeError):
 
 
 class ScryfallClient:
-    def __init__(self, http: httpx.Client | None = None, delay: float | None = None):
+    def __init__(
+        self, http: httpx.Client | None = None, delay: float | None = None, retries: int = 5, backoff: float = 1.0
+    ):
         self.http = http or httpx.Client(
             base_url=config.SCRYFALL_API,
             headers={"User-Agent": config.USER_AGENT, "Accept": "application/json"},
             timeout=30,
         )
         self.delay = config.SCRYFALL_DELAY if delay is None else delay
+        # Waits between attempts double from `backoff` seconds: 1+2+4+8+16 = ~30s before giving up.
+        self.retries = retries
+        self.backoff = backoff
         self._lock = threading.Lock()
         self._last = 0.0
 
-    def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
-        for attempt in range(4):
+    def _retry_after(self, resp: httpx.Response) -> float | None:
+        try:
+            return min(float(resp.headers["Retry-After"]), MAX_RETRY_AFTER)
+        except (KeyError, ValueError):
+            return None
+
+    def _request(self, method: str, url: str, *, retries: int | None = None, **kwargs) -> httpx.Response:
+        retries = self.retries if retries is None else retries
+        error, wait_next = "", None
+        for attempt in range(retries + 1):
+            if attempt:
+                time.sleep(wait_next if wait_next is not None else self.backoff * 2 ** (attempt - 1))
             # Scryfall asks for 50-100ms between requests; we serialise all calls.
             with self._lock:
                 wait = self._last + self.delay - time.monotonic()
                 if wait > 0:
                     time.sleep(wait)
-                resp = self.http.request(method, url, **kwargs)
-                self._last = time.monotonic()
-            if resp.status_code == 429:
-                time.sleep(1 + attempt * 2)
-                continue
-            return resp
-        raise ScryfallError("Scryfall rate limit: too many retries")
+                try:
+                    resp = self.http.request(method, url, **kwargs)
+                except httpx.TransportError as exc:
+                    resp = None
+                    error = f"Scryfall unreachable ({type(exc).__name__})"
+                finally:
+                    self._last = time.monotonic()
+            if resp is None:
+                wait_next = None
+            elif resp.status_code in RETRY_STATUSES:
+                error = f"Scryfall HTTP {resp.status_code}"
+                wait_next = self._retry_after(resp)
+            else:
+                return resp
+            if attempt < retries:
+                log.warning("%s on %s %s, retrying (%d/%d)", error, method, url, attempt + 1, retries)
+        raise ScryfallError(f"{error} after {retries + 1} attempts")
 
     def collection(self, identifiers: list[dict]) -> tuple[list[dict], list[dict]]:
         """POST /cards/collection with at most 75 identifiers."""
@@ -66,23 +99,36 @@ class ScryfallClient:
         return resp.json()
 
     def autocomplete(self, q: str) -> list[str]:
-        resp = self._request("GET", "/cards/autocomplete", params={"q": q})
+        # Someone is typing: one quick retry, then the suggestions are skipped.
+        resp = self._request("GET", "/cards/autocomplete", params={"q": q}, retries=1)
         if resp.status_code != 200:
-            return []
+            raise ScryfallError(f"/cards/autocomplete HTTP {resp.status_code}")
         return resp.json().get("data", [])
 
-    def prints(self, oracle_id: str) -> list[dict]:
-        resp = self._request(
-            "GET", "/cards/search",
-            params={"q": f"oracleid:{oracle_id}", "unique": "prints", "order": "released"},
-        )
-        if resp.status_code != 200:
-            return []
-        return resp.json().get("data", [])
+    def prints(self, oracle_id: str, max_pages: int = 5) -> list[dict]:
+        """Every printing of a card, newest first (Scryfall pages them by 175)."""
+        url: str | None = "/cards/search"
+        params: dict | None = {"q": f"oracleid:{oracle_id}", "unique": "prints", "order": "released"}
+        cards: list[dict] = []
+        for _ in range(max_pages):
+            resp = self._request("GET", url, params=params)
+            if resp.status_code == 404:  # no match
+                break
+            if resp.status_code != 200:
+                raise ScryfallError(f"/cards/search HTTP {resp.status_code}")
+            body = resp.json()
+            cards.extend(body.get("data", []))
+            url, params = (body.get("next_page"), None) if body.get("has_more") else (None, None)
+            if not url:
+                break
+        return cards
 
     def download(self, url: str) -> bytes:
         # Image CDN (cards.scryfall.io) is not rate limited like the API, but we stay polite.
-        resp = self.http.get(url, follow_redirects=True)
+        try:
+            resp = self.http.get(url, follow_redirects=True)
+        except httpx.TransportError as exc:
+            raise ScryfallError(f"Image download failed ({type(exc).__name__})") from exc
         if resp.status_code != 200:
             raise ScryfallError(f"Image HTTP {resp.status_code}")
         return resp.content

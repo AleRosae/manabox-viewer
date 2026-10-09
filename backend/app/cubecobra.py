@@ -8,12 +8,11 @@ import httpx
 from . import config
 from .cards import fetch_by_identifiers, get_card_data, oracle_id_of
 from .list_import import normalize_tags
-from .scryfall import ScryfallClient
+from .scryfall import UUID_RE, ScryfallClient
 
 # "https://cubecobra.com/cube/list/vintagecube?view=table" -> "vintagecube"
 URL_RE = re.compile(r"cubecobra\.com/cube/[A-Za-z]+/(?P<id>[A-Za-z0-9_-]+)", re.IGNORECASE)
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
-UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 # CubeCobra's per-copy statuses, in the order copies are paired with the collection on export.

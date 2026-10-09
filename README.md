@@ -6,6 +6,8 @@ A local web app to browse your [ManaBox](https://manabox.app) collection from a 
 
 ManaBox's CSV export only has ownership data: name, set, number, binder, quantity and purchase price. ManaBox Viewer fills in the rest from Scryfall (mana cost, types, oracle text, colors, prices, images) and keeps it in a local cache.
 
+If Scryfall is slow or down, requests are retried for about 30 seconds. An import still completes when some cards cannot be fetched: they are fetched again at the next start, or with *Retry missing cards* on the Import page. An import interrupted by a restart resumes on its own.
+
 ## Quick start
 
 You only need Docker.
