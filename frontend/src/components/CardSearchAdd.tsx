@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../lib/api'
 import { addToList } from '../lib/listActions'
+import type { Board } from '../lib/types'
 import { useCollectionIndex, useData } from '../store/data'
 
 interface Option {
@@ -12,8 +13,8 @@ interface Option {
   binders: string[]
 }
 
-/** "Add card" field for lists: collection cards first, then any card from Scryfall. */
-export function CardSearchAdd({ listId }: { listId: number }) {
+/** "Add card" field for lists: collection cards first, then any card from Scryfall; decks add to `board`. */
+export function CardSearchAdd({ listId, board }: { listId: number; board?: Board }) {
   const index = useCollectionIndex()
   const collection = useData((s) => s.collection)
   const [q, setQ] = useState('')
@@ -74,7 +75,7 @@ export function CardSearchAdd({ listId }: { listId: number }) {
       const oracle = index?.oracleByName.get(opt.name.toLowerCase())
       const scryfallId = oracle ? index?.bestPrintByOracle.get(oracle) : (await api.named(opt.name)).id
       if (!scryfallId) throw new Error('card not found')
-      await addToList(listId, [{ scryfall_id: scryfallId, quantity: 1 }])
+      await addToList(listId, [{ scryfall_id: scryfallId, quantity: 1, board }])
       setQ('')
       setOpen(false)
     } catch (err) {

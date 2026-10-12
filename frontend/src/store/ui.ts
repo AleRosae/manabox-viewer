@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Card } from '../lib/types'
+import type { Card, MoxfieldDeck } from '../lib/types'
 
 interface HoverState {
   card: Card | null
@@ -66,4 +66,15 @@ export const useDetail = create<DetailState>((set) => ({
   entryKey: null,
   open: (entryKey) => set({ entryKey }),
   close: () => set({ entryKey: null }),
+}))
+
+interface PendingMoxfieldState {
+  /** a deck the bookmarklet sent, waiting for its list to open the sync dialog */
+  deck: MoxfieldDeck | null
+  set: (deck: MoxfieldDeck | null) => void
+}
+
+export const usePendingMoxfield = create<PendingMoxfieldState>((set) => ({
+  deck: null,
+  set: (deck) => set({ deck }),
 }))

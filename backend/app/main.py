@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import cards, config, db, importer
-from .routers import collection, images, imports, lists, scryfall_proxy
+from .routers import collection, cubes, decks, images, imports, lists, scryfall_proxy
 from .scryfall import ScryfallError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -32,7 +32,7 @@ def scryfall_unavailable(_request: Request, exc: ScryfallError):
     return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
-for module in (imports, collection, images, lists, scryfall_proxy):
+for module in (imports, collection, images, lists, cubes, decks, scryfall_proxy):
     app.include_router(module.router)
 
 

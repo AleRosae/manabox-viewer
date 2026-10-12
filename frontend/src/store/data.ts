@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { api } from '../lib/api'
 import { indexCollection } from '../lib/cards'
-import type { CollectionData, ListSummary, Status, Usage } from '../lib/types'
+import type { CollectionData, ListKind, ListSummary, Status, Usage } from '../lib/types'
 
 interface DataState {
   status: Status | null
@@ -53,20 +53,21 @@ export function useCollectionIndex() {
   )
 }
 
-const LAST_LIST_KEY = 'mbv:lastList'
+// The list cards were last added to, and the last cube and deck opened.
+const lastListKey = (kind?: ListKind) => (kind ? `mbv:lastList:${kind}` : 'mbv:lastList')
 
-export function getLastListId(): number | null {
+export function getLastListId(kind?: ListKind): number | null {
   try {
-    const v = localStorage.getItem(LAST_LIST_KEY)
+    const v = localStorage.getItem(lastListKey(kind))
     return v ? Number(v) : null
   } catch {
     return null
   }
 }
 
-export function setLastListId(id: number) {
+export function setLastListId(id: number, kind?: ListKind) {
   try {
-    localStorage.setItem(LAST_LIST_KEY, String(id))
+    localStorage.setItem(lastListKey(kind), String(id))
   } catch {
     /* storage unavailable */
   }

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { groupItems, listTags } from './listGroups'
-import type { Card, ListItem } from './types'
+import { groupDeckItems, groupItems, listTags } from './listGroups'
+import type { Board, Card, ListItem } from './types'
 
-const item = (name: string, opts: { rarity?: string; cmc?: number; tags?: string[]; quantity?: number; owned?: number }): ListItem =>
+const item = (name: string, opts: { rarity?: string; cmc?: number; tags?: string[]; quantity?: number; owned?: number; board?: Board }): ListItem =>
   ({
     id: 0,
+    board: opts.board ?? 'main',
     oracle_id: name,
     scryfall_id: name,
     quantity: opts.quantity ?? 1,
@@ -66,5 +67,28 @@ describe('groupItems', () => {
 describe('listTags', () => {
   it('lists distinct tags alphabetically', () => {
     expect(listTags([{ tags: ['b', 'A'] }, { tags: ['a', 'C'] }])).toEqual(['A', 'b', 'C'])
+  })
+})
+
+describe('groupDeckItems', () => {
+  it('puts the command zone first, groups the main deck, and keeps side and maybe boards whole', () => {
+    const groups = groupDeckItems(
+      [
+        item('Duress', { board: 'side' }),
+        item('Bolt', { rarity: 'uncommon' }),
+        item('Atraxa', { board: 'commander', rarity: 'mythic' }),
+        item('Opt', {}),
+        item('Thoughtseize', { board: 'maybe' }),
+      ],
+      'rarity',
+      price,
+    )
+    expect(groups.map((g) => [g.title, g.items.map((i) => i.card.name)])).toEqual([
+      ['Commander', ['Atraxa']],
+      ['Common', ['Opt']],
+      ['Uncommon', ['Bolt']],
+      ['Sideboard', ['Duress']],
+      ['Maybeboard', ['Thoughtseize']],
+    ])
   })
 })

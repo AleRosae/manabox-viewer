@@ -1,5 +1,5 @@
 import { BUCKET_COLOR, BUCKET_LABEL, BUCKET_ORDER, colorBucket, isLand, primaryType, RARITY_ORDER } from './cards'
-import type { ListItem } from './types'
+import type { Board, ListItem } from './types'
 
 export type GroupBy = 'color' | 'type' | 'mv' | 'rarity' | 'tag'
 
@@ -69,24 +69,45 @@ function title(by: GroupBy, k: string, tagNames: Map<string, string>): string {
   }
 }
 
+function makeGroup(key: string, title: string, color: string, items: ListItem[], price: (i: ListItem) => number): ItemGroup {
+  const members = items.sort((a, b) => a.card.cmc - b.card.cmc || a.card.name.localeCompare(b.card.name))
+  return {
+    key,
+    title,
+    color,
+    items: members,
+    copies: members.reduce((n, i) => n + i.quantity, 0),
+    owned: members.reduce((n, i) => n + Math.min(i.owned, i.quantity), 0),
+    missingValue: members.reduce((n, i) => n + Math.max(0, i.quantity - i.owned) * price(i), 0),
+  }
+}
+
 /** Groups in display order, cards sorted by mana value then name; `price` is the unit market value. */
 export function groupItems(items: ListItem[], by: GroupBy, price: (i: ListItem) => number): ItemGroup[] {
   const groups = new Map<string, ListItem[]>()
   for (const i of items) for (const k of keysOf(i, by)) groups.set(k, [...(groups.get(k) ?? []), i])
   const tagNames = new Map(listTags(items).map((t) => [t.toLowerCase(), t]))
-  return order(by, [...groups.keys()]).map((k) => {
-    const members = groups.get(k)!.sort((a, b) => a.card.cmc - b.card.cmc || a.card.name.localeCompare(b.card.name))
-    return {
-      key: k,
-      title: title(by, k, tagNames),
-      color: by === 'color' ? BUCKET_COLOR[k] : by === 'rarity' ? (RARITY_COLOR[k] ?? NEUTRAL) : NEUTRAL,
-      items: members,
-      copies: members.reduce((n, i) => n + i.quantity, 0),
-      owned: members.reduce((n, i) => n + Math.min(i.owned, i.quantity), 0),
-      missingValue: members.reduce((n, i) => n + Math.max(0, i.quantity - i.owned) * price(i), 0),
-    }
+  return order(by, [...groups.keys()]).map((k) =>
+    makeGroup(k, title(by, k, tagNames), by === 'color' ? BUCKET_COLOR[k] : by === 'rarity' ? (RARITY_COLOR[k] ?? NEUTRAL) : NEUTRAL, groups.get(k)!, price),
+  )
+}
+
+export const BOARD_ORDER: Board[] = ['commander', 'companion', 'main', 'side', 'maybe']
+export const BOARD_LABEL: Record<Board, string> = { commander: 'Commander', companion: 'Companion', main: 'Main deck', side: 'Sideboard', maybe: 'Maybeboard' }
+const BOARD_COLOR = '#D9B45A'
+
+/** Deck groups: the command zone first, the main deck grouped `by`, then sideboard and maybeboard as one group each. */
+export function groupDeckItems(items: ListItem[], by: GroupBy, price: (i: ListItem) => number): ItemGroup[] {
+  return BOARD_ORDER.flatMap((board) => {
+    const members = items.filter((i) => i.board === board)
+    if (!members.length) return []
+    if (board === 'main') return groupItems(members, by, price)
+    return [makeGroup(`board:${board}`, BOARD_LABEL[board], BOARD_COLOR, members, price)]
   })
 }
+
+/** Played in this and other lists with more copies than the collection has (the maybeboard takes none). */
+export const isOverused = (i: ListItem) => i.board !== 'maybe' && i.owned > 0 && i.quantity + i.used_elsewhere > i.owned
 
 /** Does the item carry this tag (case-insensitively)? */
 export const hasTag = (i: { tags: string[] }, tag: string) => i.tags.some((t) => t.toLowerCase() === tag.toLowerCase())

@@ -5,8 +5,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, cubecobra, db, scryfall
-from app.cubecobra import CubeCobraClient
+from app import config, db, scryfall
+from app.sources import cubecobra
+from app.sources.cubecobra import CubeCobraClient
 from app.scryfall import ScryfallClient
 
 

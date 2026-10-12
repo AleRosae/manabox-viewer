@@ -1,13 +1,15 @@
 import clsx from 'clsx'
 import { Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { HoverPreview } from './components/HoverPreview'
 import { fmtDate } from './lib/cards'
 import { CollectionPage } from './pages/CollectionPage'
 import { ImportPage } from './pages/ImportPage'
+import { listPath } from './lib/paths'
 import { ListsPage } from './pages/ListsPage'
+import { MoxfieldSyncPage } from './pages/MoxfieldSyncPage'
 import { StatsPage } from './pages/StatsPage'
 import { useData } from './store/data'
 import { useDetail, useHover } from './store/ui'
@@ -42,8 +44,11 @@ function Header() {
           <NavLink to="/stats" className={nav}>
             Stats
           </NavLink>
-          <NavLink to="/lists" className={nav}>
-            Lists
+          <NavLink to="/cubes" className={nav}>
+            Cubes
+          </NavLink>
+          <NavLink to="/decks" className={nav}>
+            Decks
           </NavLink>
         </nav>
       )}
@@ -74,6 +79,13 @@ function RouteEffects() {
   return null
 }
 
+/** Links from before cubes and decks were apart. */
+function OldListLink() {
+  const { id } = useParams()
+  const list = useData((s) => s.lists.find((l) => String(l.id) === id))
+  return <Navigate to={list ? listPath(list) : '/decks'} replace />
+}
+
 function AppRoutes() {
   const status = useData((s) => s.status)
   const collection = useData((s) => s.collection)
@@ -85,8 +97,12 @@ function AppRoutes() {
         <>
           <Route path="/" element={<CollectionPage />} />
           <Route path="/stats" element={<StatsPage />} />
-          <Route path="/lists" element={<ListsPage />} />
-          <Route path="/lists/:id" element={<ListsPage />} />
+          <Route path="/cubes" element={<ListsPage key="cube" kind="cube" />} />
+          <Route path="/cubes/:id" element={<ListsPage key="cube" kind="cube" />} />
+          <Route path="/decks" element={<ListsPage key="deck" kind="deck" />} />
+          <Route path="/decks/moxfield-sync" element={<MoxfieldSyncPage />} />
+          <Route path="/decks/:id" element={<ListsPage key="deck" kind="deck" />} />
+          <Route path="/lists/:id" element={<OldListLink />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </>
       ) : (

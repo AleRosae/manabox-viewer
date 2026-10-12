@@ -31,6 +31,8 @@ function card(over: Partial<Card>): Card {
     released_at: '2020-01-01',
     artist: 'Someone',
     legal: ['legacy', 'vintage'],
+    legalities: { legacy: 'legal', vintage: 'legal' },
+    produces: [],
     games: ['paper'],
     faces: [],
     image_faces: 1,

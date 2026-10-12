@@ -1,6 +1,6 @@
 # ManaBox Viewer
 
-A local web app to browse your [ManaBox](https://manabox.app) collection from a computer. You can search it with Scryfall syntax, look at card images and stats, and build lists and cubes to export to [CubeCobra](https://cubecobra.com) or share with friends.
+A local web app to browse your [ManaBox](https://manabox.app) collection from a computer. You can search it with Scryfall syntax, look at card images and stats, and build cubes and decks: cubes sync with [CubeCobra](https://cubecobra.com), decks with [Moxfield](https://moxfield.com), and both can be shared with friends.
 
 ![Collection grid with filters](docs/screenshots/collection.png)
 
@@ -51,14 +51,17 @@ Stats cover market and purchase value, colors, mana curve, rarity, types, sets, 
 
 ![Collection stats](docs/screenshots/stats.png)
 
-### Lists and cubes
+### Cubes and decks
+Cubes and decks live in two separate sections, *Cubes* and *Decks*; everything in this section works for both, and decks add what is described under [Decks](#decks).
+
 - **Adding cards:** add them one at a time, or select several (click, shift-click for a range, or *Select all N filtered*). For each card you choose how many copies, e.g. "I own 3, put 2 in the cube".
 - **Cards by name, not printing:** lists track cards by name, so they stay linked to your collection across new imports.
 - **Cards you don't own:** you can add them from a Scryfall search. They are shown dimmed and flagged *Not owned*, or *1/2* when you own fewer copies than the list needs.
-- **Overuse warning:** you are warned when a card is used in more lists than the copies you own.
+- **Overuse warning:** you are warned when a card is used in more cubes and decks than the copies you own (a deck's maybeboard doesn't count).
 - **List views:** cube-style columns by color, type, mana value, rarity or tag; an image view; and per-list stats. Each group header shows how many copies you own and what the missing ones cost.
 - **Tags:** label cards with any tags (CubeCobra's *tags*), filter the list by tag and group by it. Tags travel with the CubeCobra CSV and the *Share* file.
-- **CubeCobra sync:** import a public cube from its URL (*Import list*) or link an existing list to one (*Export → Link to CubeCobra cube…*), then see right away which cards you're missing. **Sync** shows what changed on CubeCobra (cards added, removed, new tags) before applying it; the cube decides the cards, while its tags are added to yours (tags removed on CubeCobra are kept locally; a card holds at most 20 tags). A sync that would find no recognisable cards in the cube is refused, so it can't empty the list.
+- **Tokens:** the *Tokens* tab lists the tokens, emblems and markers (The Monarch, the Initiative, dungeons, Day/Night…) the cards make, which cards make them and whether you own them. Change how many you need, hide the ones you don't, and export them (all, or only the missing ones).
+- **CubeCobra sync** (cubes): import a public cube from its URL (*Import cube*) or link an existing cube to one (*Export → Link to CubeCobra cube…*), then see right away which cards you're missing. **Sync** shows what changed on CubeCobra (cards added, removed, new tags) before applying it; the cube decides the cards, while its tags are added to yours (tags removed on CubeCobra are kept locally; a card holds at most 20 tags). A sync that would find no recognisable cards in the cube is refused, so it can't empty the list.
 - **You vs CubeCobra:** a linked cube gets a **Compare** tab that sets your collection against what CubeCobra marks as owned (owned, proxied or borrowed count the same): cards you own but CubeCobra doesn't know yet, cards marked owned on CubeCobra but missing from your collection, and so on.
 - **Owned status on export:** the CubeCobra CSV marks the copies in your collection as *Owned* (keeping *Premium Owned*); the other copies keep their CubeCobra status (*Proxied*, *Ordered*, *Borrowed*...) or are *Not Owned*. Re-uploading it brings CubeCobra up to date with your collection.
 - **Exports:**
@@ -70,11 +73,21 @@ Stats cover market and purchase value, colors, mana curve, rarity, types, sets, 
 
 ![Adding a selection to a list](docs/screenshots/bulk-add.png)
 
+### Decks
+- **Formats:** Standard, Pioneer, Modern, Legacy, Vintage, Pauper, Premodern and Commander (or none). The deck is checked as you edit it: deck and sideboard size, copies (basic lands and *any number* cards excepted), banned, not legal and restricted cards; for Commander, exactly 100 cards, a valid commander or pair of partners, singleton and color identity. Cards that break a rule are marked.
+- **Boards:** Commander, Companion, Main deck, Sideboard and Maybeboard. Move a card with the ⇄ button; add cards straight to a board. The maybeboard is shown but not counted: it's left out of totals, stats, overuse, tokens and shopping lists. The copies you own go to the commander first, then the main deck, then the sideboard.
+- **Moxfield:** Moxfield doesn't let other servers read its decks, so the deck comes from your browser:
+  - *paste* the export (on Moxfield: *More → Export → Copy for Moxfield*) in *Import deck* or *Sync*; boards missing from the export (e.g. a commander set here) are left as they are;
+  - or drag **Sync to ManaBox Viewer** (in the Decks sidebar) to your bookmarks bar and click it on a Moxfield deck page: the deck opens in the app, ready to import, or to sync if it's already linked. If the browser blocks the two tabs from talking, the deck is also copied to the clipboard: paste it in the page that opened.
+
+  Sync shows what changed (cards added, removed, moved to another board, copies, format) before applying it; your printings are kept.
+- **Exports:** a deck `.txt` with *Commander / Deck / Sideboard* sections for Moxfield or Arena, and the missing cards with or without set codes (*names only* works with shops that use their own codes, like CardTrader).
+
 ### Sharing lists
 **Share** exports a list in the ManaBox Viewer format: a plain `.txt` that also records how many copies *you* own of each card.
 
 ```
-# ManaBox Viewer list v1
+# ManaBox Viewer list v2
 # name: Pauper Cube
 # kind: cube
 # exported: 2026-10-07
@@ -84,14 +97,14 @@ Stats cover market and purchase value, colors, mana curve, rarity, types, sets, 
 
 Anything after `|` is ignored by other tools, so the file still works wherever `1 Name (SET) 123` lists are accepted.
 
-**Import list** (on the Lists page) accepts a share file or any plain `.txt` list, either uploaded or pasted.
+**Import cube** and **Import deck** accept a share file or any plain `.txt` list, either uploaded or pasted.
 - **Before saving**, it shows how the list compares with your collection: owned, partial and missing cards, plus the cost to complete.
 - **Shared ownership:** when the file comes from another ManaBox Viewer user, the list gets a **Compare** tab showing who has what: *both*, *only you*, *only them* and *neither*, and the copies and value each of you is missing. It's handy for deciding who brings which cards to a shared cube, or what to trade.
 
 ![Comparing ownership of a shared list](docs/screenshots/list-compare.png)
 
 ### New exports
-Importing a new CSV replaces the previous one. You get a summary of the changes (cards added, removed, and quantity changes), and lists update their ownership automatically.
+Importing a new CSV replaces the previous one. You get a summary of the changes (cards added, removed, and quantity changes), and cubes and decks update their ownership automatically.
 
 ## Prices
 
@@ -110,6 +123,6 @@ cd frontend && npm install && npm run dev
 npx vitest run
 ```
 
-**Stack:** FastAPI + SQLite on the backend; React 19 + Vite + TypeScript + Tailwind CSS v4 on the frontend. Filtering, sorting and stats run in the browser, and the backend handles imports, the Scryfall cache, images and lists. The Docker image is a multi-stage build that serves the built frontend from FastAPI.
+**Stack:** FastAPI + SQLite on the backend; React 19 + Vite + TypeScript + Tailwind CSS v4 on the frontend. Filtering, sorting and stats run in the browser, and the backend handles imports, the Scryfall cache, images, cubes and decks. The Docker image is a multi-stage build that serves the built frontend from FastAPI.
 
 Card data and images are provided by [Scryfall](https://scryfall.com). ManaBox Viewer is not affiliated with ManaBox, Scryfall, CubeCobra or Wizards of the Coast.

@@ -8,10 +8,23 @@ from .cards import fetch_by_identifiers, oracle_id_of, upsert_cards
 from .scryfall import ScryfallClient
 
 MAX_LINES = 2000
+MAX_QTY = 999
 # Fuzzy lookups are one request each: only try a bounded number of them.
 MAX_FUZZY = 40
-# Section headers written by deck builders (Arena, Moxfield, ...).
-SECTION_RE = re.compile(r"^(deck|main ?deck|mainboard|sideboard|maybeboard|commander|companion|about)\s*:?$", re.IGNORECASE)
+# Section headers written by deck builders (Arena, Moxfield, ...) and the board of the lines that follow.
+SECTION_RE = re.compile(
+    r"^(?://\s*)?(deck|main ?deck|mainboard|main|sideboard|side|maybeboard|maybe|considering|commanders?|companions?|about)\s*:?$",
+    re.IGNORECASE,
+)
+SECTION_BOARD = {
+    "deck": "main", "main deck": "main", "maindeck": "main", "mainboard": "main", "main": "main",
+    "sideboard": "side", "side": "side", "maybeboard": "maybe", "maybe": "maybe", "considering": "maybe",
+    "commander": "commander", "commanders": "commander", "companion": "companion", "companions": "companion",
+}
+# Markers some tools put on the commander's line instead of a section.
+COMMANDER_MARK_RE = re.compile(r"\s+(\*CMDR\*|#!?Commander)(?=\s|$)", re.IGNORECASE)
+# Moxfield-style "#tag" labels at the end of a line.
+HASHTAGS_RE = re.compile(r"(?:\s+#!?[^\s#|]+)+\s*$")
 
 # "2x Lightning Bolt (2X2) 117 *F* | owned 1 | tags: Burn; Aggro" — everything but the name is optional.
 LINE_RE = re.compile(
@@ -35,6 +48,8 @@ class ParsedLine:
     collector_number: str | None = None
     owned: int | None = None
     tags: list[str] = field(default_factory=list)
+    # set by a section header (or a commander marker); None in plain lists
+    board: str | None = None
 
 
 MAX_TAGS = 20
@@ -59,16 +74,30 @@ def normalize_tags(tags: list[str] | str) -> list[str]:
 
 
 def parse_list_text(text: str) -> tuple[dict, list[ParsedLine], list[str]]:
-    """Return (meta, parsed lines, unparseable lines). meta comes from '# key: value' headers."""
+    """Return (meta, parsed lines, unparseable lines). meta comes from '# key: value' headers.
+
+    Section headers ("Sideboard", "Commander"...) set the board of the following lines; the
+    "About" section of Arena exports (deck name) is skipped.
+    """
     meta: dict[str, str] = {}
     lines: list[ParsedLine] = []
     invalid: list[str] = []
-    for raw in text.lstrip("﻿").splitlines()[:MAX_LINES]:
+    board: str | None = None
+    for raw in text.lstrip("\ufeff").splitlines()[:MAX_LINES]:
         line = raw.strip()
         if not line:
             continue
-        if SECTION_RE.match(line):
+        section = SECTION_RE.match(line)
+        if section:
+            board = SECTION_BOARD.get(re.sub(r"\s+", " ", section.group(1).lower()), "about")
             continue
+        if board == "about":
+            continue
+        line_board = board
+        if COMMANDER_MARK_RE.search(line):
+            line, line_board = COMMANDER_MARK_RE.sub("", line), "commander"
+        if not line.startswith("#"):
+            line = HASHTAGS_RE.sub("", line)
         if line.startswith(("#", "//")):
             header = re.match(r"^#\s*([a-z_]+)\s*:\s*(.*)$", line, re.IGNORECASE)
             if header:
@@ -86,6 +115,7 @@ def parse_list_text(text: str) -> tuple[dict, list[ParsedLine], list[str]]:
             collector_number=m.group("cn"),
             owned=int(m.group("owned")) if m.group("owned") is not None else None,
             tags=normalize_tags((m.group("tags") or "").split(";")),
+            board=line_board,
         ))
     return meta, lines, invalid
 
@@ -138,12 +168,15 @@ def resolve_lines(
 
 
 def merge_by_oracle(resolved: list[tuple[ParsedLine, dict]]) -> list[dict]:
-    """One entry per card: quantities and owned copies add up, tags merge, the first printing wins."""
-    merged: dict[str, dict] = {}
+    """One entry per card and board: quantities and owned copies add up, tags merge, the first printing wins."""
+    merged: dict[tuple[str, str], dict] = {}
     for line, card in resolved:
         oid = oracle_id_of(card)
-        entry = merged.setdefault(oid, {"oracle_id": oid, "card": card, "quantity": 0, "their_owned": None, "tags": []})
-        entry["quantity"] += line.quantity
+        board = line.board or "main"
+        entry = merged.setdefault(
+            (board, oid), {"oracle_id": oid, "board": board, "card": card, "quantity": 0, "their_owned": None, "tags": []}
+        )
+        entry["quantity"] = min(MAX_QTY, entry["quantity"] + line.quantity)
         entry["tags"] = normalize_tags(entry["tags"] + line.tags)
         if line.owned is not None:
             entry["their_owned"] = (entry["their_owned"] or 0) + min(line.owned, line.quantity)

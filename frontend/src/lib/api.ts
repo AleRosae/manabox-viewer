@@ -1,4 +1,4 @@
-import type { Card, CollectionData, CubeSync, ImportDiff, ImportInfo, ListDetail, ListImportPreview, ListKind, ListSummary, Status, Usage } from './types'
+import type { Board, Card, CollectionData, DeckFormat, ImportDiff, ImportInfo, ListDetail, ListImportPreview, ListKind, ListSummary, ListToken, MoxfieldDeck, RemoteSource, Status, SyncDiff, Usage } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -34,7 +34,24 @@ export interface BulkApplied {
   oracle_id: string
   scryfall_id: string
   name: string
+  board: Board
   delta: number
+}
+
+/** Without a board, copies are added to the main deck and removed from the last board holding the card. */
+export interface BulkItem {
+  scryfall_id: string
+  quantity: number
+  board?: Board
+}
+
+export type ExportFormat = 'cubecobra_csv' | 'txt' | 'deck' | 'viewer' | 'missing' | 'missing_names' | 'tokens' | 'tokens_missing'
+
+/** What a Moxfield deck is read from: its text export (plus the deck URL to link to) or the bookmarklet. */
+export interface MoxfieldSource {
+  deck?: string
+  text?: string
+  payload?: MoxfieldDeck
 }
 
 export const api = {
@@ -53,30 +70,36 @@ export const api = {
   lists: () => request<ListSummary[]>('/api/lists'),
   usage: () => request<Usage>('/api/lists/usage'),
   list: (id: number) => request<ListDetail>(`/api/lists/${id}`),
-  createList: (name: string, kind: ListKind) => request<ListSummary>('/api/lists', json('POST', { name, kind })),
-  /** `cubecobra_id`: a cube URL or id, '' to unlink */
-  updateList: (id: number, patch: Partial<Pick<ListSummary, 'name' | 'description' | 'kind'> & { cubecobra_id: string }>) =>
+  createList: (name: string, kind: ListKind, format?: DeckFormat) => request<ListSummary>('/api/lists', json('POST', { name, kind, format })),
+  updateList: (id: number, patch: Partial<Pick<ListSummary, 'name' | 'description' | 'format'>> & { unlink?: boolean }) =>
     request<ListSummary>(`/api/lists/${id}`, json('PATCH', patch)),
   deleteList: (id: number) => request<void>(`/api/lists/${id}`, { method: 'DELETE' }),
-  bulkItems: (id: number, items: { scryfall_id: string; quantity: number }[]) =>
-    request<{ applied: BulkApplied[] }>(`/api/lists/${id}/items/bulk`, json('POST', { items })),
-  updateItem: (listId: number, itemId: number, patch: { quantity?: number; preferred_scryfall_id?: string; tags?: string[] }) =>
+  bulkItems: (id: number, items: BulkItem[]) => request<{ applied: BulkApplied[] }>(`/api/lists/${id}/items/bulk`, json('POST', { items })),
+  updateItem: (listId: number, itemId: number, patch: { quantity?: number; preferred_scryfall_id?: string; tags?: string[]; board?: Board }) =>
     request<unknown>(`/api/lists/${listId}/items/${itemId}`, json('PATCH', patch)),
   deleteItem: (listId: number, itemId: number) =>
     request<void>(`/api/lists/${listId}/items/${itemId}`, { method: 'DELETE' }),
-  exportUrl: (id: number, format: 'cubecobra_csv' | 'txt' | 'viewer' | 'missing') => `/api/lists/${id}/export?format=${format}`,
+  tokens: (id: number) => request<ListToken[]>(`/api/lists/${id}/tokens`),
+  /** `quantity` null goes back to the default */
+  updateToken: (id: number, oracleId: string, patch: { quantity: number | null; hidden: boolean }) =>
+    request<unknown>(`/api/lists/${id}/tokens/${oracleId}`, json('PATCH', patch)),
+  exportUrl: (id: number, format: ExportFormat) => `/api/lists/${id}/export?format=${format}`,
   previewListImport: (text: string) => request<ListImportPreview>('/api/lists/import/preview', json('POST', { text })),
   importList: (body: {
     name: string
     kind: ListKind
+    format?: DeckFormat | null
     shared_by: string | null
-    cubecobra_id?: string | null
-    items: { scryfall_id: string; quantity: number; their_owned: number | null; tags: string[]; cube_statuses?: string[] }[]
+    remote_source?: RemoteSource | null
+    remote_id?: string | null
+    items: { scryfall_id: string; quantity: number; board: Board; their_owned: number | null; tags: string[]; cube_statuses?: string[] | null }[]
   }) => request<ListSummary>('/api/lists/import', json('POST', body)),
-  previewCube: (url: string) => request<ListImportPreview>('/api/lists/cubecobra/preview', json('POST', { url })),
+  previewCube: (url: string) => request<ListImportPreview>('/api/cubes/cubecobra/preview', json('POST', { url })),
   /** `cube` links the list to another cube (saved only with `apply`) */
-  syncCube: (id: number, body: { cube?: string; apply?: boolean }) =>
-    request<CubeSync>(`/api/lists/${id}/sync`, json('POST', body)),
+  syncCube: (id: number, body: { cube?: string; apply?: boolean }) => request<SyncDiff>(`/api/cubes/${id}/sync`, json('POST', body)),
+  previewMoxfield: (source: MoxfieldSource) => request<ListImportPreview>('/api/decks/moxfield/preview', json('POST', source)),
+  /** `deck` links the list to another deck (saved only with `apply`) */
+  syncDeck: (id: number, body: MoxfieldSource & { apply?: boolean }) => request<SyncDiff>(`/api/decks/${id}/sync`, json('POST', body)),
 
   autocomplete: (q: string) => request<string[]>(`/api/scryfall/autocomplete?q=${encodeURIComponent(q)}`),
   named: (name: string) => request<Card>(`/api/scryfall/named?name=${encodeURIComponent(name)}`),

@@ -38,6 +38,34 @@ def _face(face: dict) -> dict:
     }
 
 
+# Helper cards a card brings to the table besides tokens: The Monarch, Day // Night, The Initiative...
+MARKER_TYPES = {"Card", "Card // Card"}
+
+
+def related_kind(part: dict) -> str | None:
+    """token, emblem or marker for an entry of Scryfall's all_parts; None for real cards (meld, combos...)."""
+    type_line = part.get("type_line") or ""
+    if part.get("component") == "token" or type_line.startswith("Token"):
+        return "token"
+    if part.get("component") != "combo_piece":
+        return None
+    if type_line.startswith("Emblem"):
+        return "emblem"
+    if "Dungeon" in type_line or (type_line in MARKER_TYPES and "Checklist" not in (part.get("name") or "")):
+        return "marker"
+    return None
+
+
+def produces(card: dict) -> list[dict]:
+    """[{id, kind, name}] of the tokens, emblems and markers the card makes."""
+    out = []
+    for part in card.get("all_parts") or []:
+        kind = related_kind(part)
+        if kind and part.get("id") and part["id"] != card["id"]:
+            out.append({"id": part["id"], "kind": kind, "name": part.get("name") or "?"})
+    return out
+
+
 def slim(card: dict) -> dict:
     """The subset of Scryfall data the frontend needs for search, stats and display."""
     faces = card.get("card_faces") or []
@@ -74,6 +102,9 @@ def slim(card: dict) -> dict:
         "released_at": card.get("released_at"),
         "artist": card.get("artist"),
         "legal": sorted(k for k, v in (card.get("legalities") or {}).items() if v == "legal"),
+        # legal | not_legal | restricted | banned, per format
+        "legalities": card.get("legalities") or {},
+        "produces": produces(card),
         "games": card.get("games", []),
         "faces": [_face(f) for f in faces],
         "image_faces": 2 if len(faces) > 1 and all("image_uris" in f for f in faces) else 1,
@@ -160,7 +191,7 @@ def fetch_by_identifiers(
 
 
 # Bump when slim() changes so cached projections are rebuilt at startup.
-SLIM_VERSION = 1
+SLIM_VERSION = 2
 
 
 def rebuild_slims_if_needed(conn: sqlite3.Connection) -> None:

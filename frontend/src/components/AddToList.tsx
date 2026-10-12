@@ -1,11 +1,17 @@
 import * as Popover from '@radix-ui/react-popover'
 import { useState } from 'react'
 import { addToList, createList } from '../lib/listActions'
-import type { Card } from '../lib/types'
+import type { Card, ListKind } from '../lib/types'
 import { getLastListId, useCollectionIndex, useData } from '../store/data'
 import { QtyStepper } from './QtyStepper'
 
-/** Native select with the user's lists plus a "new list" option. */
+/** A cube or deck, or one to create. */
+export type ListTarget = number | `new:${ListKind}`
+
+export const isNewTarget = (v: ListTarget): v is `new:${ListKind}` => typeof v === 'string'
+const newKind = (v: `new:${ListKind}`) => v.slice(4) as ListKind
+
+/** Native select with the user's cubes and decks, plus "new cube" and "new deck". */
 export function ListPicker({
   value,
   onChange,
@@ -13,8 +19,8 @@ export function ListPicker({
   onNewName,
   className,
 }: {
-  value: number | 'new'
-  onChange: (v: number | 'new') => void
+  value: ListTarget
+  onChange: (v: ListTarget) => void
   newName: string
   onNewName: (v: string) => void
   className?: string
@@ -26,20 +32,28 @@ export function ListPicker({
         aria-label="Target list"
         className="field w-full"
         value={value}
-        onChange={(e) => onChange(e.target.value === 'new' ? 'new' : Number(e.target.value))}
+        onChange={(e) => onChange(e.target.value.startsWith('new:') ? (e.target.value as ListTarget) : Number(e.target.value))}
       >
-        {lists.map((l) => (
-          <option key={l.id} value={l.id}>
-            {l.name}
-          </option>
-        ))}
-        <option value="new">+ New list…</option>
+        {(['cube', 'deck'] as ListKind[]).map((kind) => {
+          const ofKind = lists.filter((l) => l.kind === kind)
+          return ofKind.length ? (
+            <optgroup key={kind} label={kind === 'cube' ? 'Cubes' : 'Decks'}>
+              {ofKind.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </optgroup>
+          ) : null
+        })}
+        <option value="new:cube">+ New cube…</option>
+        <option value="new:deck">+ New deck…</option>
       </select>
-      {value === 'new' && (
+      {isNewTarget(value) && (
         <input
           autoFocus
-          aria-label="New list name"
-          placeholder="New list name"
+          aria-label={`New ${newKind(value)} name`}
+          placeholder={`New ${newKind(value)} name`}
           className="field mt-2 w-full"
           value={newName}
           onChange={(e) => onNewName(e.target.value)}
@@ -49,22 +63,22 @@ export function ListPicker({
   )
 }
 
-export function useDefaultList(): number | 'new' {
+export function useDefaultList(): ListTarget {
   const lists = useData((s) => s.lists)
   const last = getLastListId()
   if (last && lists.some((l) => l.id === last)) return last
-  return lists[0]?.id ?? 'new'
+  return lists[0]?.id ?? 'new:cube'
 }
 
-/** Resolves the picker value to a list id, creating the list if needed. */
-export async function resolveList(value: number | 'new', newName: string): Promise<number | null> {
-  if (value !== 'new') return value
+/** Resolves the picker value to a list id, creating the cube or deck if needed. */
+export async function resolveList(value: ListTarget, newName: string): Promise<number | null> {
+  if (!isNewTarget(value)) return value
   if (!newName.trim()) return null
-  return (await createList(newName)).id
+  return (await createList(newName, newKind(value))).id
 }
 
-export function availability(listId: number | 'new', owned: number, usage: Record<string, number>) {
-  const inThis = listId === 'new' ? 0 : (usage[String(listId)] ?? 0)
+export function availability(listId: ListTarget, owned: number, usage: Record<string, number>) {
+  const inThis = isNewTarget(listId) ? 0 : (usage[String(listId)] ?? 0)
   const elsewhere = Object.entries(usage).reduce((n, [lid, q]) => (lid === String(listId) ? n : n + q), 0)
   return { inThis, elsewhere, available: Math.max(0, owned - inThis) }
 }
@@ -85,7 +99,7 @@ export function AddToListForm({ card, onDone }: { card: Card; onDone?: () => voi
   const index = useCollectionIndex()
   const allUsage = useData((s) => s.usage)
   const usage = allUsage[card.oracle_id] ?? {}
-  const [listId, setListId] = useState<number | 'new'>(useDefaultList())
+  const [listId, setListId] = useState<ListTarget>(useDefaultList())
   const [newName, setNewName] = useState('')
   const [qty, setQty] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -117,7 +131,7 @@ export function AddToListForm({ card, onDone }: { card: Card; onDone?: () => voi
       <div className="flex flex-wrap items-start gap-2.5">
         <ListPicker className="min-w-44 flex-1" value={listId} onChange={setListId} newName={newName} onNewName={setNewName} />
         <QtyStepper value={qty} onChange={setQty} min={1} />
-        <button type="submit" className="btn btn-primary" disabled={busy || (listId === 'new' && !newName.trim())}>
+        <button type="submit" className="btn btn-primary" disabled={busy || (isNewTarget(listId) && !newName.trim())}>
           Add
         </button>
       </div>

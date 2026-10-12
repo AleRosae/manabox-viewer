@@ -1,12 +1,9 @@
 import { toast } from 'sonner'
 import { setLastListId, useData } from '../store/data'
-import { api } from './api'
-import type { ListKind } from './types'
+import { api, type BulkItem } from './api'
+import type { DeckFormat, ListKind } from './types'
 
-export interface AddItem {
-  scryfall_id: string
-  quantity: number
-}
+export type AddItem = BulkItem
 
 /** Adds copies to a list, then shows a toast with an undo action. */
 export async function addToList(listId: number, items: AddItem[]): Promise<void> {
@@ -31,7 +28,7 @@ export async function addToList(listId: number, items: AddItem[]): Promise<void>
         onClick: async () => {
           await api.bulkItems(
             listId,
-            applied.map((a) => ({ scryfall_id: a.scryfall_id, quantity: -a.delta })),
+            applied.map((a) => ({ scryfall_id: a.scryfall_id, quantity: -a.delta, board: a.board })),
           )
           await useData.getState().listsChanged()
           toast('Add undone')
@@ -44,8 +41,8 @@ export async function addToList(listId: number, items: AddItem[]): Promise<void>
   }
 }
 
-export async function createList(name: string, kind: ListKind = 'generic') {
-  const list = await api.createList(name.trim(), kind)
+export async function createList(name: string, kind: ListKind, format?: DeckFormat) {
+  const list = await api.createList(name.trim(), kind, format)
   await useData.getState().listsChanged()
   return list
 }

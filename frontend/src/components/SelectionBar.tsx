@@ -1,9 +1,8 @@
 import { X } from 'lucide-react'
 import { useState } from 'react'
-import { createList } from '../lib/listActions'
 import type { Entry } from '../lib/types'
 import { useSelection } from '../store/ui'
-import { ListPicker, useDefaultList } from './AddToList'
+import { isNewTarget, type ListTarget, ListPicker, resolveList, useDefaultList } from './AddToList'
 import { BulkAddDialog } from './BulkAddDialog'
 
 interface Props {
@@ -13,7 +12,7 @@ interface Props {
 export function SelectionBar({ visible }: Props) {
   const { selected, mode, selectAll, setMode } = useSelection()
   const defaultList = useDefaultList()
-  const [listId, setListId] = useState<number | 'new'>(defaultList)
+  const [listId, setListId] = useState<ListTarget>(defaultList)
   const [newName, setNewName] = useState('')
   const [reviewing, setReviewing] = useState<number | null>(null)
 
@@ -22,15 +21,13 @@ export function SelectionBar({ visible }: Props) {
   const allSelected = chosen.length === visible.length && visible.length > 0
 
   const openReview = async () => {
-    if (listId === 'new') {
-      if (!newName.trim()) return
-      const list = await createList(newName)
-      setListId(list.id)
+    const id = await resolveList(listId, newName)
+    if (id == null) return
+    if (isNewTarget(listId)) {
+      setListId(id)
       setNewName('')
-      setReviewing(list.id)
-    } else {
-      setReviewing(listId)
     }
+    setReviewing(id)
   }
 
   return (
@@ -49,7 +46,7 @@ export function SelectionBar({ visible }: Props) {
         <span className="flex-1" />
         <span className="text-[13px] text-muted">Add to</span>
         <ListPicker className="w-56" value={listId} onChange={setListId} newName={newName} onNewName={setNewName} />
-        <button type="button" className="btn btn-primary" disabled={chosen.length === 0 || (listId === 'new' && !newName.trim())} onClick={() => void openReview()}>
+        <button type="button" className="btn btn-primary" disabled={chosen.length === 0 || (isNewTarget(listId) && !newName.trim())} onClick={() => void openReview()}>
           Add…
         </button>
         <button type="button" className="btn btn-ghost btn-icon" aria-label="Cancel selection" onClick={() => setMode(false)}>

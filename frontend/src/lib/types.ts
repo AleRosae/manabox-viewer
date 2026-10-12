@@ -37,6 +37,10 @@ export interface Card {
   released_at: string | null
   artist: string | null
   legal: string[]
+  /** legal | not_legal | restricted | banned, per format */
+  legalities: Record<string, string>
+  /** tokens, emblems and markers the card makes */
+  produces: { id: string; kind: TokenKind; name: string }[]
   games: string[]
   faces: Face[]
   image_faces: 1 | 2
@@ -119,20 +123,28 @@ export interface ImportDiff {
   summary: { added_copies: number; removed_copies: number }
 }
 
-export type ListKind = 'cube' | 'generic'
+export type ListKind = 'cube' | 'deck'
+export type DeckFormat = 'none' | 'standard' | 'pioneer' | 'modern' | 'legacy' | 'vintage' | 'pauper' | 'premodern' | 'commander'
+/** Decks only; cubes keep everything on `main`. The maybeboard is considered, not played. */
+export type Board = 'commander' | 'companion' | 'main' | 'side' | 'maybe'
+export type RemoteSource = 'cubecobra' | 'moxfield'
 
 export interface ListSummary {
   id: number
   name: string
   description: string
   kind: ListKind
+  /** decks only ('none' checks nothing) */
+  format: DeckFormat | null
   /** who shared the list, when it was imported from someone else's export */
   shared_by: string | null
-  /** linked CubeCobra cube id; synced on demand */
-  cubecobra_id: string | null
+  /** the CubeCobra cube or Moxfield deck the list syncs from */
+  remote_source: RemoteSource | null
+  remote_id: string | null
   synced_at: string | null
   created_at: string
   updated_at: string
+  /** copies played (maybeboard excluded) */
   card_count: number
   unique_count: number
 }
@@ -141,10 +153,12 @@ export type Ownership = 'owned' | 'partial' | 'not_owned'
 
 export interface ListItem {
   id: number
+  board: Board
   oracle_id: string
   scryfall_id: string
   quantity: number
   added_at: string
+  /** copies the collection has for this item, once the boards before it in the list took theirs */
   owned: number
   used_elsewhere: number
   ownership: Ownership
@@ -183,6 +197,7 @@ export interface Entry {
 
 export interface ListImportPreviewItem {
   oracle_id: string
+  board: Board
   scryfall_id: string
   quantity: number
   owned: number
@@ -190,30 +205,73 @@ export interface ListImportPreviewItem {
   their_owned: number | null
   tags: string[]
   /** only for CubeCobra cubes */
-  cube_statuses?: string[]
+  cube_statuses: string[] | null
   card: Card
 }
 
 export interface ListImportPreview {
-  meta: { name: string | null; kind: ListKind | null; has_ownership: boolean; cubecobra_id?: string }
+  meta: {
+    name: string | null
+    kind: ListKind | null
+    format: DeckFormat | null
+    has_ownership: boolean
+    /** the CubeCobra cube or Moxfield deck to link the list to */
+    remote?: { source: RemoteSource; id: string } | null
+  }
   items: ListImportPreviewItem[]
   /** lines that could not be parsed or matched to a card */
   unresolved: string[]
 }
 
-/** Differences between a list and its CubeCobra cube (applied when `applied` is true). */
-export interface CubeSync {
-  cube: { id: string; name: string; url: string }
+interface SyncLine {
+  oracle_id: string
+  name: string
+  board: Board
+}
+
+/** Differences between a list and its CubeCobra cube or Moxfield deck (applied when `applied` is true). */
+export interface SyncDiff {
+  remote: { source: RemoteSource; id: string; name: string; url: string }
   applied: boolean
-  added: { oracle_id: string; name: string; quantity: number; owned: number }[]
-  removed: { oracle_id: string; name: string; quantity: number }[]
-  changed: { oracle_id: string; name: string; from: number; to: number }[]
+  added: (SyncLine & { quantity: number; owned: number })[]
+  removed: (SyncLine & { quantity: number })[]
+  changed: (SyncLine & { from: number; to: number })[]
+  /** cards that changed board (`board` is the new one) */
+  moved: (SyncLine & { from_board: Board; from: number; to: number })[]
   /** cards that gain tags from the cube (local tags are kept) */
-  retagged: { oracle_id: string; name: string; tags: string[] }[]
+  retagged: (SyncLine & { tags: string[] })[]
   /** cards whose copies marked as in the cube changed; `from` is null when not known yet */
-  restatused: { oracle_id: string; name: string; from: number | null; to: number; quantity: number }[]
-  /** custom cards or ids Scryfall does not know: skipped */
+  restatused: (SyncLine & { from: number | null; to: number; quantity: number })[]
+  format: { from: DeckFormat | null; to: DeckFormat } | null
+  /** custom cards, ids Scryfall does not know or lines not recognised: skipped */
   unresolved: string[]
+  /** boards the remote doesn't list (a pasted export without them): left as they are */
+  kept_boards: Board[]
   /** cards in the list before the sync */
   list_size: number
+}
+
+/** A Moxfield deck as the bookmarklet reads it. */
+export interface MoxfieldDeck {
+  id: string
+  name: string
+  format: string | null
+  boards: Record<string, { scryfall_id: string | null; name: string; quantity: number; set?: string | null; cn?: string | null }[]>
+}
+
+export type TokenKind = 'token' | 'emblem' | 'marker'
+
+export interface ListToken {
+  oracle_id: string
+  scryfall_id: string
+  kind: TokenKind
+  card: Card
+  /** cards of the list that make it */
+  sources: string[]
+  quantity: number
+  /** the quantity was set by hand */
+  custom: boolean
+  hidden: boolean
+  owned: number
+  ownership: Ownership
 }

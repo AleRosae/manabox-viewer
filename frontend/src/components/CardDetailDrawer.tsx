@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import { fmtEur, isDoubleFaced, marketPrice } from '../lib/cards'
 import type { Card } from '../lib/types'
 import { useCollectionIndex, useData, useUsdRate } from '../store/data'
+import { listPath } from '../lib/paths'
 import { AddToListForm } from './AddToList'
 import { CardImage } from './CardImage'
 import { ManaCost, OracleText } from './ManaCost'
@@ -184,7 +185,7 @@ function DetailBody({ card }: { card: Card }) {
           if (!list) return null
           return (
             <div key={lid} className="flex items-center justify-between rounded-[10px] border border-line bg-panel-2 py-1.5 pl-3.5 pr-1.5 text-sm">
-              <Link to={`/lists/${lid}`} className="hover:text-accent">
+              <Link to={listPath(list)} className="hover:text-accent">
                 {list.name}
               </Link>
               <span className="flex items-center gap-1.5">

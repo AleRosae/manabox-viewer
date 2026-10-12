@@ -5,10 +5,10 @@ import sqlite3
 
 import httpx
 
-from . import config
-from .cards import fetch_by_identifiers, get_card_data, oracle_id_of
-from .list_import import normalize_tags
-from .scryfall import UUID_RE, ScryfallClient
+from .. import config
+from ..cards import fetch_by_identifiers, get_card_data, oracle_id_of
+from ..list_import import normalize_tags
+from ..scryfall import UUID_RE, ScryfallClient
 
 # "https://cubecobra.com/cube/list/vintagecube?view=table" -> "vintagecube"
 URL_RE = re.compile(r"cubecobra\.com/cube/[A-Za-z]+/(?P<id>[A-Za-z0-9_-]+)", re.IGNORECASE)
@@ -94,7 +94,7 @@ class CubeCobraClient:
 def resolve_cube(
     conn: sqlite3.Connection, client: ScryfallClient, cube: dict
 ) -> tuple[list[dict], list[str]]:
-    """Group the cube's copies by card: [{oracle_id, card, quantity, tags, statuses}] plus unresolved names.
+    """Group the cube's copies by card: [{oracle_id, board, card, quantity, tags, statuses}] plus unresolved names.
 
     Custom cards (no Scryfall id) and ids Scryfall does not know end up in the unresolved list.
     """
@@ -113,7 +113,9 @@ def resolve_cube(
             unresolved.append(c["name"])
             continue
         oid = oracle_id_of(card)
-        entry = merged.setdefault(oid, {"oracle_id": oid, "card": card, "quantity": 0, "tags": [], "statuses": []})
+        entry = merged.setdefault(
+            oid, {"oracle_id": oid, "board": "main", "card": card, "quantity": 0, "tags": [], "statuses": []}
+        )
         entry["quantity"] += 1
         entry["statuses"] = sort_statuses(entry["statuses"] + [c["status"]])
         entry["tags"] = normalize_tags(entry["tags"] + c["tags"])
