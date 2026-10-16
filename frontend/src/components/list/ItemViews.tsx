@@ -140,7 +140,10 @@ function ItemTile({ item, actions }: { item: ListItem; actions: ItemActions }) {
   )
 }
 
-/** Groups as cube-style columns or as image sections. */
+/** Light line between the sub-groups of a group, as on CubeCobra. */
+const SubgroupSeparator = ({ className }: { className?: string }) => <hr aria-hidden="true" className={clsx('m-0 h-px border-0 bg-line-2', className)} />
+
+/** Groups as cube-style columns or as image sections, their sub-groups split by a separator. */
 export function GroupedItems({ groups, view, actions }: { groups: ItemGroup[]; view: 'columns' | 'grid'; actions: ItemActions }) {
   if (view === 'columns')
     return (
@@ -155,8 +158,13 @@ export function GroupedItems({ groups, view, actions }: { groups: ItemGroup[]; v
               <MissingValue value={g.missingValue} />
             </div>
             <div className="p-1.5">
-              {g.items.map((i) => (
-                <ItemRow key={i.id} item={i} actions={actions} />
+              {g.subgroups.map((sub, n) => (
+                <div key={sub.key}>
+                  {n > 0 && <SubgroupSeparator className="mx-2 my-1.5" />}
+                  {sub.items.map((i) => (
+                    <ItemRow key={i.id} item={i} actions={actions} />
+                  ))}
+                </div>
               ))}
             </div>
           </section>
@@ -174,11 +182,16 @@ export function GroupedItems({ groups, view, actions }: { groups: ItemGroup[]; v
             </h2>
             <MissingValue value={g.missingValue} />
           </div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
-            {g.items.map((i) => (
-              <ItemTile key={i.id} item={i} actions={actions} />
-            ))}
-          </div>
+          {g.subgroups.map((sub, n) => (
+            <div key={sub.key} className="flex flex-col gap-3">
+              {n > 0 && <SubgroupSeparator />}
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
+                {sub.items.map((i) => (
+                  <ItemTile key={i.id} item={i} actions={actions} />
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
       ))}
     </div>
