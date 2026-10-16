@@ -69,8 +69,14 @@ function title(by: GroupBy, k: string, tagNames: Map<string, string>): string {
   }
 }
 
+const typeRank = (i: ListItem) => TYPE_ORDER.indexOf(primaryType(i.card))
+
+/** Order inside a group: type (creatures first, lands last), then mana value, then name. */
+export const byTypeThenMv = (a: ListItem, b: ListItem) =>
+  typeRank(a) - typeRank(b) || a.card.cmc - b.card.cmc || a.card.name.localeCompare(b.card.name)
+
 function makeGroup(key: string, title: string, color: string, items: ListItem[], price: (i: ListItem) => number): ItemGroup {
-  const members = items.sort((a, b) => a.card.cmc - b.card.cmc || a.card.name.localeCompare(b.card.name))
+  const members = items.sort(byTypeThenMv)
   return {
     key,
     title,
@@ -82,7 +88,7 @@ function makeGroup(key: string, title: string, color: string, items: ListItem[],
   }
 }
 
-/** Groups in display order, cards sorted by mana value then name; `price` is the unit market value. */
+/** Groups in display order, cards sorted by type, mana value, then name; `price` is the unit market value. */
 export function groupItems(items: ListItem[], by: GroupBy, price: (i: ListItem) => number): ItemGroup[] {
   const groups = new Map<string, ListItem[]>()
   for (const i of items) for (const k of keysOf(i, by)) groups.set(k, [...(groups.get(k) ?? []), i])

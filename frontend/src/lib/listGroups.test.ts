@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { groupDeckItems, groupItems, listTags } from './listGroups'
 import type { Board, Card, ListItem } from './types'
 
-const item = (name: string, opts: { rarity?: string; cmc?: number; tags?: string[]; quantity?: number; owned?: number; board?: Board }): ListItem =>
+const item = (name: string, opts: { rarity?: string; cmc?: number; type?: string; tags?: string[]; quantity?: number; owned?: number; board?: Board }): ListItem =>
   ({
     id: 0,
     board: opts.board ?? 'main',
@@ -15,12 +15,28 @@ const item = (name: string, opts: { rarity?: string; cmc?: number; tags?: string
     their_owned: null,
     added_at: '',
     tags: opts.tags ?? [],
-    card: { name, rarity: opts.rarity ?? 'common', cmc: opts.cmc ?? 1, type_line: 'Instant', colors: ['U'] } as Card,
+    card: { name, rarity: opts.rarity ?? 'common', cmc: opts.cmc ?? 1, type_line: opts.type ?? 'Instant', colors: ['U'] } as Card,
   }) as ListItem
 
 const price = () => 2
 
 describe('groupItems', () => {
+  it('orders the cards of a group by type, then mana value, then name', () => {
+    const [blue] = groupItems(
+      [
+        item('Counterspell', { cmc: 2 }),
+        item('Ponder', { cmc: 1, type: 'Sorcery' }),
+        item('Opt', { cmc: 1 }),
+        item('Snapcaster Mage', { cmc: 2, type: 'Creature — Human Wizard' }),
+        item('Delver of Secrets', { cmc: 1, type: 'Creature — Human Wizard' }),
+        item('Brainstorm', { cmc: 1 }),
+      ],
+      'color',
+      price,
+    )
+    expect(blue.items.map((i) => i.card.name)).toEqual(['Delver of Secrets', 'Snapcaster Mage', 'Brainstorm', 'Opt', 'Counterspell', 'Ponder'])
+  })
+
   it('groups by rarity in rarity order, with per-group stats', () => {
     const groups = groupItems(
       [
