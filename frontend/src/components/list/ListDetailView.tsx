@@ -7,13 +7,13 @@ import { api } from '../../lib/api'
 import { BUCKET_COLOR, BUCKET_LABEL, fmtEur, fmtNum, marketPrice } from '../../lib/cards'
 import { hasComparison } from '../../lib/compare'
 import { FORMAT_ORDER, FORMATS, validateDeck } from '../../lib/legality'
-import { BOARD_LABEL, GROUP_LABEL, type GroupBy, groupDeckItems, groupItems, hasTag, isOverused, listTags } from '../../lib/listGroups'
+import { BOARD_LABEL, GROUP_LABEL, type GroupBy, groupDeckItems, groupItems, hasTag, isOverused, listTags, THEN_LABEL, type ThenBy, thenByAfter, thenByOptions } from '../../lib/listGroups'
 import { deckUrl } from '../../lib/moxfield'
 import { listPath } from '../../lib/paths'
 import { computeStats } from '../../lib/stats'
 import type { Board, DeckFormat, ListDetail, ListItem, ListKind } from '../../lib/types'
 import { setLastListId, useData, useUsdRate } from '../../store/data'
-import { usePendingMoxfield } from '../../store/ui'
+import { getGrouping, type Grouping, setGrouping, usePendingMoxfield } from '../../store/ui'
 import { CardDetailDrawer } from '../CardDetailDrawer'
 import { CardSearchAdd } from '../CardSearchAdd'
 import { ListCompareView } from '../ListCompareView'
@@ -77,7 +77,12 @@ export function ListDetailView({ listId, kind }: { listId: number; kind: ListKin
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('cards')
   const [own, setOwn] = useState<OwnFilter>('all')
-  const [groupBy, setGroupBy] = useState<GroupBy>(kind === 'deck' ? 'type' : 'color')
+  const [grouping, setGroupingState] = useState<Grouping>(() => getGrouping(kind))
+  const { by: groupBy, then: thenBy } = grouping
+  const changeGrouping = (next: Grouping) => {
+    setGroupingState(next)
+    setGrouping(kind, next)
+  }
   const [view, setView] = useState<'columns' | 'grid'>('columns')
   const [addBoard, setAddBoard] = useState<Board>('main')
   const [includeNotOwned, setIncludeNotOwned] = useState(true)
@@ -120,8 +125,8 @@ export function ListDetailView({ listId, kind }: { listId: number; kind: ListKin
   }, [items, own, activeTag])
   const price = useCallback((i: ListItem) => marketPrice(i.card, 'normal', rate) ?? 0, [rate])
   const groups = useMemo(
-    () => (list?.kind === 'deck' ? groupDeckItems(shown, groupBy, price) : groupItems(shown, groupBy, price)),
-    [list?.kind, shown, groupBy, price],
+    () => (list?.kind === 'deck' ? groupDeckItems(shown, groupBy, thenBy, price) : groupItems(shown, groupBy, thenBy, price)),
+    [list?.kind, shown, groupBy, thenBy, price],
   )
   const issues = useMemo(() => (list?.kind === 'deck' ? validateDeck(items, list.format ?? 'none') : []), [list, items])
   const issueByCard = useMemo(() => {
@@ -291,10 +296,27 @@ export function ListDetailView({ listId, kind }: { listId: number; kind: ListKin
           <div className="flex items-center gap-2 pb-1.5">
             <label className="flex items-center gap-2 text-[13px] text-muted">
               Group by
-              <select className="field min-h-9" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
+              <select
+                className="field min-h-9"
+                value={groupBy}
+                onChange={(e) => {
+                  const by = e.target.value as GroupBy
+                  changeGrouping({ by, then: thenByAfter(groupBy, thenBy, by) })
+                }}
+              >
                 {(Object.keys(GROUP_LABEL) as GroupBy[]).map((g) => (
                   <option key={g} value={g}>
                     {GROUP_LABEL[g]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-[13px] text-muted">
+              Then by
+              <select className="field min-h-9" value={thenBy} onChange={(e) => changeGrouping({ by: groupBy, then: e.target.value as ThenBy })}>
+                {thenByOptions(groupBy).map((g) => (
+                  <option key={g} value={g}>
+                    {THEN_LABEL[g]}
                   </option>
                 ))}
               </select>

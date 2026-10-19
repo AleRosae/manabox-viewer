@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { Card, MoxfieldDeck } from '../lib/types'
+import { defaultThenBy, GROUP_LABEL, type GroupBy, type ThenBy, thenByOptions } from '../lib/listGroups'
+import type { Card, ListKind, MoxfieldDeck } from '../lib/types'
 
 interface HoverState {
   card: Card | null
@@ -78,3 +79,31 @@ export const usePendingMoxfield = create<PendingMoxfieldState>((set) => ({
   deck: null,
   set: (deck) => set({ deck }),
 }))
+
+export interface Grouping {
+  by: GroupBy
+  then: ThenBy
+}
+
+const groupingKey = (kind: ListKind) => `mbv:grouping:${kind}`
+
+/** How the cards of a cube or deck were last grouped in this browser; decks start by type, cubes by color then type. */
+export function getGrouping(kind: ListKind): Grouping {
+  const fallback: GroupBy = kind === 'deck' ? 'type' : 'color'
+  try {
+    const saved = JSON.parse(localStorage.getItem(groupingKey(kind)) ?? 'null') as Partial<Grouping> | null
+    const by = saved?.by && Object.hasOwn(GROUP_LABEL, saved.by) ? saved.by : fallback
+    const then = saved?.then && thenByOptions(by).includes(saved.then) ? saved.then : defaultThenBy(by)
+    return { by, then }
+  } catch {
+    return { by: fallback, then: defaultThenBy(fallback) }
+  }
+}
+
+export function setGrouping(kind: ListKind, grouping: Grouping) {
+  try {
+    localStorage.setItem(groupingKey(kind), JSON.stringify(grouping))
+  } catch {
+    /* storage unavailable */
+  }
+}

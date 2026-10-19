@@ -5,6 +5,21 @@ export type GroupBy = 'color' | 'type' | 'mv' | 'rarity' | 'tag'
 
 export const GROUP_LABEL: Record<GroupBy, string> = { color: 'Color', type: 'Type', mv: 'Mana value', rarity: 'Rarity', tag: 'Tag' }
 
+/** Second level: splits each group into sub-groups; `none` keeps the group whole. */
+export type ThenBy = GroupBy | 'none'
+
+export const THEN_LABEL: Record<ThenBy, string> = { none: 'None', ...GROUP_LABEL }
+
+/** The second-level criteria available once the groups are made `by` something: every other one, or none. */
+export const thenByOptions = (by: GroupBy): ThenBy[] => ['none', ...(Object.keys(GROUP_LABEL) as GroupBy[]).filter((g) => g !== by)]
+
+/** Type inside each group (creatures first, lands last); nothing when the groups are types already. */
+export const defaultThenBy = (by: GroupBy): ThenBy => (by === 'type' ? 'none' : 'type')
+
+/** The second level once the first changes from `from` to `to`: a default follows the new default, a choice stays unless it collides. */
+export const thenByAfter = (from: GroupBy, then: ThenBy, to: GroupBy): ThenBy =>
+  then === to || then === defaultThenBy(from) ? defaultThenBy(to) : then
+
 const TYPE_ORDER = ['Creature', 'Planeswalker', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Battle', 'Land', 'Other']
 const TYPE_LABEL: Record<string, string> = {
   Creature: 'Creature', Planeswalker: 'Planeswalker', Instant: 'Instant', Sorcery: 'Sorcery', Artifact: 'Artifact',
@@ -20,11 +35,17 @@ export const UNTAGGED = ''
 
 const capitalize = (s: string | null | undefined) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Unknown')
 
+export interface ItemSubgroup {
+  key: string
+  items: ListItem[]
+}
+
 export interface ItemGroup {
   key: string
   title: string
   color: string
-  items: ListItem[]
+  /** the cards split by the second-level criterion; a single sub-group when there is none */
+  subgroups: ItemSubgroup[]
   copies: number
   /** copies of the group covered by the collection */
   owned: number
@@ -44,7 +65,7 @@ function keysOf(i: ListItem, by: GroupBy): string[] {
       return [i.card.rarity ?? 'unknown']
     case 'tag':
       // A card with several tags shows up in each of their groups; tags match case-insensitively.
-      return i.tags.length ? i.tags.map((t) => t.toLowerCase()) : [UNTAGGED]
+      return i.tags.length ? [...new Set(i.tags.map((t) => t.toLowerCase()))] : [UNTAGGED]
   }
 }
 
@@ -69,32 +90,43 @@ function title(by: GroupBy, k: string, tagNames: Map<string, string>): string {
   }
 }
 
-const typeRank = (i: ListItem) => TYPE_ORDER.indexOf(primaryType(i.card))
+const byMvThenName = (a: ListItem, b: ListItem) => a.card.cmc - b.card.cmc || a.card.name.localeCompare(b.card.name)
 
-/** Order inside a group: type (creatures first, lands last), then mana value, then name. */
-export const byTypeThenMv = (a: ListItem, b: ListItem) =>
-  typeRank(a) - typeRank(b) || a.card.cmc - b.card.cmc || a.card.name.localeCompare(b.card.name)
+/** Buckets `items` by their keys, in display order; a card with several keys (tags) lands in each bucket. */
+function bucket(items: ListItem[], by: GroupBy): [string, ListItem[]][] {
+  const buckets = new Map<string, ListItem[]>()
+  for (const i of items)
+    for (const k of keysOf(i, by)) {
+      const members = buckets.get(k)
+      if (members) members.push(i)
+      else buckets.set(k, [i])
+    }
+  return order(by, [...buckets.keys()]).map((k) => [k, buckets.get(k)!])
+}
 
-function makeGroup(key: string, title: string, color: string, items: ListItem[], price: (i: ListItem) => number): ItemGroup {
-  const members = items.sort(byTypeThenMv)
+function makeGroup(key: string, title: string, color: string, items: ListItem[], then: ThenBy, price: (i: ListItem) => number): ItemGroup {
+  const sorted = [...items].sort(byMvThenName)
+  const subgroups = then === 'none' ? [{ key: '', items: sorted }] : bucket(sorted, then).map(([k, members]) => ({ key: k, items: members }))
+  // The stats count each card once, even when its tags put it in several sub-groups.
   return {
     key,
     title,
     color,
-    items: members,
-    copies: members.reduce((n, i) => n + i.quantity, 0),
-    owned: members.reduce((n, i) => n + Math.min(i.owned, i.quantity), 0),
-    missingValue: members.reduce((n, i) => n + Math.max(0, i.quantity - i.owned) * price(i), 0),
+    subgroups,
+    copies: sorted.reduce((n, i) => n + i.quantity, 0),
+    owned: sorted.reduce((n, i) => n + Math.min(i.owned, i.quantity), 0),
+    missingValue: sorted.reduce((n, i) => n + Math.max(0, i.quantity - i.owned) * price(i), 0),
   }
 }
 
-/** Groups in display order, cards sorted by type, mana value, then name; `price` is the unit market value. */
-export function groupItems(items: ListItem[], by: GroupBy, price: (i: ListItem) => number): ItemGroup[] {
-  const groups = new Map<string, ListItem[]>()
-  for (const i of items) for (const k of keysOf(i, by)) groups.set(k, [...(groups.get(k) ?? []), i])
+/**
+ * Groups in display order, each split into sub-groups `then`; cards sorted by mana value, then name.
+ * `price` is the unit market value.
+ */
+export function groupItems(items: ListItem[], by: GroupBy, then: ThenBy, price: (i: ListItem) => number): ItemGroup[] {
   const tagNames = new Map(listTags(items).map((t) => [t.toLowerCase(), t]))
-  return order(by, [...groups.keys()]).map((k) =>
-    makeGroup(k, title(by, k, tagNames), by === 'color' ? BUCKET_COLOR[k] : by === 'rarity' ? (RARITY_COLOR[k] ?? NEUTRAL) : NEUTRAL, groups.get(k)!, price),
+  return bucket(items, by).map(([k, members]) =>
+    makeGroup(k, title(by, k, tagNames), by === 'color' ? BUCKET_COLOR[k] : by === 'rarity' ? (RARITY_COLOR[k] ?? NEUTRAL) : NEUTRAL, members, then, price),
   )
 }
 
@@ -102,13 +134,16 @@ export const BOARD_ORDER: Board[] = ['commander', 'companion', 'main', 'side', '
 export const BOARD_LABEL: Record<Board, string> = { commander: 'Commander', companion: 'Companion', main: 'Main deck', side: 'Sideboard', maybe: 'Maybeboard' }
 const BOARD_COLOR = '#D9B45A'
 
-/** Deck groups: the command zone first, the main deck grouped `by`, then sideboard and maybeboard as one group each. */
-export function groupDeckItems(items: ListItem[], by: GroupBy, price: (i: ListItem) => number): ItemGroup[] {
+/**
+ * Deck groups: the command zone first, the main deck grouped `by`, then sideboard and maybeboard as one group each.
+ * Every group is split `then`; with no second level the board groups are split `by`, like the main deck's columns.
+ */
+export function groupDeckItems(items: ListItem[], by: GroupBy, then: ThenBy, price: (i: ListItem) => number): ItemGroup[] {
   return BOARD_ORDER.flatMap((board) => {
     const members = items.filter((i) => i.board === board)
     if (!members.length) return []
-    if (board === 'main') return groupItems(members, by, price)
-    return [makeGroup(`board:${board}`, BOARD_LABEL[board], BOARD_COLOR, members, price)]
+    if (board === 'main') return groupItems(members, by, then, price)
+    return [makeGroup(`board:${board}`, BOARD_LABEL[board], BOARD_COLOR, members, then === 'none' ? by : then, price)]
   })
 }
 
